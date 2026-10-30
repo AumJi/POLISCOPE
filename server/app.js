@@ -77,15 +77,6 @@ app.get("/api/news", async (request, response, next) => {
   }
 
   let refresh = { refreshed: false };
-  let refreshError = null;
-
-  if (category === "investment") {
-    try {
-      refresh = await refreshNews({ maxPages: 1, tagParties: false });
-    } catch (error) {
-      refreshError = error;
-    }
-  }
 
   try {
     const [articles, total] = category === "investment"
@@ -97,8 +88,6 @@ app.get("/api/news", async (request, response, next) => {
         listNews({ partyCode, sourceKey, limit, includeUnreviewed }),
         countNews({ partyCode, sourceKey, includeUnreviewed }),
       ]);
-    if (refreshError && articles.length === 0) throw refreshError;
-
     response.json({
       articles,
       meta: {
@@ -106,7 +95,7 @@ app.get("/api/news", async (request, response, next) => {
         total,
         refreshed: refresh.refreshed,
         cached: refresh.cached ?? false,
-        stale: Boolean(refreshError),
+        stale: false,
         includeUnreviewed,
         category,
       },

@@ -42,6 +42,8 @@ Copy `.env.example` to `.env`:
 
 ```env
 DATABASE_URL=postgresql://...
+DATABASE_POOL_MAX=1
+DATABASE_IDLE_TIMEOUT_MS=10000
 ALPHA_VANTAGE_API_KEY=...
 TYPHOON_API_KEY=...
 TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
@@ -85,6 +87,7 @@ npm run build
 ```
 
 The ingestion commands require the relevant server credentials and a configured database. They do not fabricate prices or news. Market ingestion processes the six configured assets sequentially to reduce provider quota pressure.
+Public `GET /api/news` and dashboard requests read saved PostgreSQL records only; they do not call Currents/RSS on every page view. New news is collected by the protected Vercel Cron endpoint or the local CLI command.
 
 ## Database
 
@@ -142,16 +145,32 @@ Free or entry-level providers may return excerpts rather than full article text,
 
 ## Vercel
 
-The existing Vercel project is preserved. `vercel.json` routes `/api/*` to the Express function, serves `dist`, and schedules protected news and market ingestion. Add these as server-side environment variables in the existing project:
+The existing Vercel project `poliscope-ywc-react` is preserved. `vercel.json` routes `/api/*` to `api/index.js`, serves the Vite `dist` output, preserves direct React route refreshes, and schedules protected news and market ingestion once per day. The Express app is exported as a Vercel Node.js Function; no persistent `server/index.js` process is started by Vercel.
+
+For deployment:
+
+```bash
+npm install
+npm test
+npm run build
+npx vercel link --yes --project poliscope-ywc-react
+npx vercel pull --yes --environment=production
+npx vercel deploy --prod --yes
+```
+
+Do not commit `.env`, `.env.local`, `.vercel`, or any pulled Vercel environment file. The Vercel dashboard must contain the server-side environment variables below for Production, Preview, and Cron as appropriate.
 
 - `DATABASE_URL` using the Supabase pooler connection string
 - `ALPHA_VANTAGE_API_KEY`
 - `NEWS_PROVIDER`, `CURRENTS_API_KEY`, and optional `RSS_FEEDS`
 - `TYPHOON_API_KEY`, `TYPHOON_MODEL`
 - `CRON_SECRET`
+- `DATABASE_POOL_MAX=1` and `DATABASE_IDLE_TIMEOUT_MS=10000` for the Supabase transaction pooler/serverless runtime
 
-Vercel Hobby cron schedules are limited and are not a substitute for a high-frequency market data system. Do not push or deploy without explicit approval.
+Use the Supabase transaction pooler connection string for `DATABASE_URL` (normally the pooler host/port, not a direct database connection). Keep the serverless pool small because each warm Vercel instance can create its own pool. The API uses SSL for Supabase URLs, parameterized queries, connection timeouts, and transactions for related writes.
+
+Vercel Hobby cron schedules are limited and are not a substitute for a high-frequency market data system. News and market cron calls are protected by `CRON_SECRET`; unauthorized requests return `401`. The current function timeout is 120 seconds, while provider requests have their own shorter timeouts. Market ingestion stores successful assets even when another provider request fails.
 
 ## Verification status
 
-Mocked provider, normalization, analytics, asset matching, streaming, API validation, and build checks are included. The latest local verification passed `npm test` with 65 tests and `npm run build`. Alpha Vantage, Currents, Typhoon, and Vercel live verification remain credential/deployment dependent.
+Mocked provider, normalization, analytics, asset matching, streaming, API validation, and build checks are included. The latest local verification passed `npm test` with 69 tests and `npm run build`. Alpha Vantage, Currents, Typhoon, and Vercel live verification remain credential/deployment dependent unless explicitly tested against configured production services.
