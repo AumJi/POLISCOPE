@@ -41,6 +41,7 @@ app.get("/api/health", (_request, response) => {
 app.get("/api/news", async (request, response, next) => {
   const partyCode = typeof request.query.party === "string" ? request.query.party.trim() : undefined;
   const sourceKey = typeof request.query.source === "string" ? request.query.source.trim() : undefined;
+  const includeUnreviewed = request.query.includeUnreviewed === "true";
 
   if (partyCode && !/^[a-zA-Z0-9_-]{1,120}$/.test(partyCode)) {
     return response.status(400).json({ error: "Invalid party code" });
@@ -64,8 +65,8 @@ app.get("/api/news", async (request, response, next) => {
 
   try {
     const [articles, total] = await Promise.all([
-      listNews({ partyCode, sourceKey, limit: 10 }),
-      countNews({ partyCode, sourceKey }),
+      listNews({ partyCode, sourceKey, limit: 10, includeUnreviewed }),
+      countNews({ partyCode, sourceKey, includeUnreviewed }),
     ]);
     if (refreshError && articles.length === 0) throw refreshError;
 
@@ -77,6 +78,7 @@ app.get("/api/news", async (request, response, next) => {
         refreshed: refresh.refreshed,
         cached: refresh.cached ?? false,
         stale: Boolean(refreshError),
+        includeUnreviewed,
       },
     });
   } catch (error) {
@@ -125,7 +127,9 @@ app.get("/api/news/:id", async (request, response, next) => {
   }
 
   try {
-    const article = await findArticleById(request.params.id);
+    const article = await findArticleById(request.params.id, {
+      includeUnreviewed: request.query.includeUnreviewed === "true",
+    });
     if (!article) return response.status(404).json({ error: "Article not found" });
     response.json({ article });
   } catch (error) {

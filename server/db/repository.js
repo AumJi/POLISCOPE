@@ -5,9 +5,14 @@ export const POLITICAL_ARTICLE_SQL = `(
   OR (',' || LOWER(a.category) || ',') LIKE '%,politics,%'
 )`;
 
-export function buildNewsQuery({ partyCode, sourceKey, limit = 10 } = {}) {
+function associationVisibilitySql(includeUnreviewed) {
+  return includeUnreviewed ? "" : " AND ap.is_reviewed = true";
+}
+
+export function buildNewsQuery({ partyCode, sourceKey, limit = 10, includeUnreviewed = false } = {}) {
   const values = [];
   const filters = [POLITICAL_ARTICLE_SQL];
+  const visibilitySql = associationVisibilitySql(includeUnreviewed);
 
   if (partyCode) {
     values.push(partyCode);
@@ -16,7 +21,7 @@ export function buildNewsQuery({ partyCode, sourceKey, limit = 10 } = {}) {
       FROM article_parties filter_ap
       INNER JOIN political_parties filter_party ON filter_party.id = filter_ap.party_id
       WHERE filter_ap.article_id = a.id
-        AND filter_ap.is_reviewed = true
+        ${includeUnreviewed ? "" : "AND filter_ap.is_reviewed = true"}
         AND filter_party.party_code = $${values.length}
     )`);
   }
@@ -62,14 +67,15 @@ export function buildNewsQuery({ partyCode, sourceKey, limit = 10 } = {}) {
               'officialWebsiteUrl', party.official_website_url,
               'logoUrl', party.logo_url,
               'relationType', ap.relation_type,
-              'taggingMethod', ap.tagging_method
+              'taggingMethod', ap.tagging_method,
+              'isReviewed', ap.is_reviewed
             )
-          ) FILTER (WHERE party.id IS NOT NULL AND ap.is_reviewed = true),
+          ) FILTER (WHERE party.id IS NOT NULL${visibilitySql}),
           '[]'::json
         ) AS parties
       FROM articles a
       INNER JOIN news_sources source ON source.id = a.source_id
-      LEFT JOIN article_parties ap ON ap.article_id = a.id AND ap.is_reviewed = true
+      LEFT JOIN article_parties ap ON ap.article_id = a.id${visibilitySql}
       LEFT JOIN political_parties party ON party.id = ap.party_id
       ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""}
       GROUP BY a.id, source.id
@@ -103,7 +109,7 @@ export async function listNews(options = {}) {
   return result.rows.map(mapArticleRow);
 }
 
-export function buildNewsCountQuery({ partyCode, sourceKey } = {}) {
+export function buildNewsCountQuery({ partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const values = [];
   const filters = [POLITICAL_ARTICLE_SQL];
 
@@ -114,7 +120,7 @@ export function buildNewsCountQuery({ partyCode, sourceKey } = {}) {
       FROM article_parties filter_ap
       INNER JOIN political_parties filter_party ON filter_party.id = filter_ap.party_id
       WHERE filter_ap.article_id = a.id
-        AND filter_ap.is_reviewed = true
+        ${includeUnreviewed ? "" : "AND filter_ap.is_reviewed = true"}
         AND filter_party.party_code = $${values.length}
     )`);
   }
@@ -187,7 +193,8 @@ export function mapPartyRow(row) {
   };
 }
 
-export async function findArticleById(articleId) {
+export async function findArticleById(articleId, { includeUnreviewed = false } = {}) {
+  const visibilitySql = associationVisibilitySql(includeUnreviewed);
   const result = await query(`
     SELECT
       a.id,
@@ -211,14 +218,15 @@ export async function findArticleById(articleId) {
             'officialWebsiteUrl', party.official_website_url,
             'logoUrl', party.logo_url,
             'relationType', ap.relation_type,
-            'taggingMethod', ap.tagging_method
+            'taggingMethod', ap.tagging_method,
+            'isReviewed', ap.is_reviewed
           )
-        ) FILTER (WHERE party.id IS NOT NULL AND ap.is_reviewed = true),
+        ) FILTER (WHERE party.id IS NOT NULL${visibilitySql}),
         '[]'::json
       ) AS parties
     FROM articles a
     INNER JOIN news_sources source ON source.id = a.source_id
-    LEFT JOIN article_parties ap ON ap.article_id = a.id AND ap.is_reviewed = true
+    LEFT JOIN article_parties ap ON ap.article_id = a.id${visibilitySql}
     LEFT JOIN political_parties party ON party.id = ap.party_id
     WHERE a.id = $1 AND ${POLITICAL_ARTICLE_SQL}
     GROUP BY a.id, source.id
