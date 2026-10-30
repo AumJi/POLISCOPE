@@ -3,6 +3,7 @@ import {
   buildNewsDataUrl,
   deduplicateArticles,
   fetchNewsData,
+  fetchNewsDataPages,
   normalizeCategories,
   normalizeNewsArticle,
 } from "../server/news/newsData.js";
@@ -77,6 +78,19 @@ describe("NewsData integration", () => {
   it("returns a typed error for rate limits", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "error" }), { status: 429 }));
     await expect(fetchNewsData({ apiKey: "test-key", fetchImpl })).rejects.toMatchObject({ status: 429, code: "NEWS_RATE_LIMITED" });
+  });
+
+  it("follows nextPage cursors up to the configured page limit", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ articles: [{ originalUrl: "https://example.com/1", externalId: "1", source: { sourceKey: "source" } }], totalResults: 21, nextPage: "cursor-2" })
+      .mockResolvedValueOnce({ articles: [{ originalUrl: "https://example.com/2", externalId: "2", source: { sourceKey: "source" } }], totalResults: 21, nextPage: "cursor-3" })
+      .mockResolvedValueOnce({ articles: [{ originalUrl: "https://example.com/3", externalId: "3", source: { sourceKey: "source" } }], totalResults: 21, nextPage: "cursor-4" });
+
+    const result = await fetchNewsDataPages({ apiKey: "test-key", maxPages: 3, fetcher });
+
+    expect(result.pagesFetched).toBe(3);
+    expect(result.articles).toHaveLength(3);
+    expect(fetcher.mock.calls.map(([options]) => options.page)).toEqual([undefined, "cursor-2", "cursor-3"]);
   });
 });
 

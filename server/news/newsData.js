@@ -1,5 +1,7 @@
 const NEWS_DATA_ENDPOINT = "https://newsdata.io/api/1/latest";
 export const POLITICAL_CATEGORY = "politics";
+export const DEFAULT_MAX_INGESTION_PAGES = 3;
+export const MAX_INGESTION_PAGES = 5;
 
 export class NewsDataError extends Error {
   constructor(message, { status = 502, code = "NEWS_PROVIDER_ERROR" } = {}) {
@@ -10,16 +12,18 @@ export class NewsDataError extends Error {
   }
 }
 
-export function buildNewsDataUrl(apiKey, { size = 10 } = {}) {
+export function buildNewsDataUrl(apiKey, { size = 10, page } = {}) {
   const url = new URL(NEWS_DATA_ENDPOINT);
-  url.search = new URLSearchParams({
+  const searchParams = new URLSearchParams({
     apikey: apiKey,
     country: "th",
     language: "th",
     category: "politics",
     size: String(Math.min(Math.max(size, 1), 10)),
     removeduplicate: "1",
-  }).toString();
+  });
+  if (page) searchParams.set("page", page);
+  url.search = searchParams.toString();
   return url;
 }
 
@@ -116,6 +120,7 @@ export async function fetchNewsData({
   apiKey = process.env.NEWS_API_KEY,
   fetchImpl = fetch,
   size = 10,
+  page,
 } = {}) {
   if (!apiKey) {
     throw new NewsDataError("NewsData API key is not configured", { status: 503, code: "NEWS_API_NOT_CONFIGURED" });
@@ -123,7 +128,7 @@ export async function fetchNewsData({
 
   let response;
   try {
-    response = await fetchImpl(buildNewsDataUrl(apiKey, { size }), {
+    response = await fetchImpl(buildNewsDataUrl(apiKey, { size, page }), {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10_000),
     });
@@ -150,6 +155,47 @@ export async function fetchNewsData({
   return {
     articles: deduplicateArticles(rawArticles.map(normalizeNewsArticle).filter(Boolean)).slice(0, size),
     totalResults: Number(payload?.totalResults || 0),
+    nextPage: typeof payload?.nextPage === "string" && payload.nextPage ? payload.nextPage : null,
+    page,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+function normalizePageLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_MAX_INGESTION_PAGES;
+  return Math.min(Math.max(Math.trunc(parsed), 1), MAX_INGESTION_PAGES);
+}
+
+export async function fetchNewsDataPages({
+  apiKey = process.env.NEWS_API_KEY,
+  fetchImpl = fetch,
+  size = 10,
+  maxPages = process.env.NEWS_MAX_PAGES || DEFAULT_MAX_INGESTION_PAGES,
+  fetcher = fetchNewsData,
+} = {}) {
+  const pageLimit = normalizePageLimit(maxPages);
+  const articles = [];
+  let nextPage = null;
+  let totalResults = 0;
+  let page;
+  let pagesFetched = 0;
+
+  for (let pageNumber = 0; pageNumber < pageLimit; pageNumber += 1) {
+    const batch = await fetcher({ apiKey, fetchImpl, size, page });
+    pagesFetched += 1;
+    articles.push(...batch.articles);
+    totalResults = Math.max(totalResults, batch.totalResults || 0);
+    nextPage = batch.nextPage || null;
+    if (!nextPage) break;
+    page = nextPage;
+  }
+
+  return {
+    articles: deduplicateArticles(articles),
+    totalResults,
+    pagesFetched,
+    nextPage,
     fetchedAt: new Date().toISOString(),
   };
 }
