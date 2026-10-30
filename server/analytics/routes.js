@@ -12,7 +12,7 @@ import {
 import { buildTopicAnalysis } from "./topics.js";
 
 const router = express.Router();
-const FILTER_PATTERN = /^[a-zA-Z0-9_-]{1,120}$/;
+const FILTER_PATTERN = /^[a-zA-Z0-9_.-]{1,120}$/;
 
 function getFilters(request) {
   const partyCode = typeof request.query.party === "string" ? request.query.party.trim() : undefined;

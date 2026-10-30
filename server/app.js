@@ -45,7 +45,7 @@ app.get("/api/news", async (request, response, next) => {
   if (partyCode && !/^[a-zA-Z0-9_-]{1,120}$/.test(partyCode)) {
     return response.status(400).json({ error: "Invalid party code" });
   }
-  if (sourceKey && !/^[a-zA-Z0-9_-]{1,120}$/.test(sourceKey)) {
+  if (sourceKey && !/^[a-zA-Z0-9_.-]{1,120}$/.test(sourceKey)) {
     return response.status(400).json({ error: "Invalid source key" });
   }
 
