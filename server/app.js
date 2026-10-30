@@ -11,6 +11,7 @@ import {
   streamSummary,
 } from "./ai/summarize.js";
 import { isNewsIngestionRunning, refreshNews } from "./news/service.js";
+import { getNewsProviderConfig, isNewsProviderConfigured } from "./news/provider.js";
 import analyticsRouter from "./analytics/routes.js";
 
 const app = express();
@@ -32,7 +33,11 @@ app.get("/api/health", (_request, response) => {
     service: "poliscope-api",
     environment: {
       database: isDatabaseConfigured,
-      newsApi: Boolean(process.env.NEWS_API_KEY),
+      newsProvider: getNewsProviderConfig().name,
+      newsApi: isNewsProviderConfigured(),
+      currentsApi: Boolean(process.env.CURRENTS_API_KEY),
+      newsDataApi: Boolean(process.env.NEWS_API_KEY),
+      rssProvider: Boolean(process.env.RSS_FEEDS),
       typhoonApi: Boolean(process.env.TYPHOON_API_KEY),
     },
   });
@@ -95,7 +100,7 @@ app.get("/api/cron/ingest", async (request, response, next) => {
     return response.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!isDatabaseConfigured || !process.env.NEWS_API_KEY) {
+  if (!isDatabaseConfigured || !isNewsProviderConfigured()) {
     return response.status(503).json({ error: "News ingestion is not configured" });
   }
 

@@ -1,7 +1,7 @@
 import { isDatabaseConfigured } from "../db/pool.js";
 import { persistNewsArticles } from "./persist.js";
-import { fetchNewsDataPages } from "./newsData.js";
 import { tagArticlesWithTyphoon } from "../parties/tagging.js";
+import { getNewsProviderConfig } from "./provider.js";
 
 export const NEWS_CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -19,19 +19,21 @@ export function isNewsIngestionRunning() {
 export async function refreshNews({
   force = false,
   now = () => Date.now(),
-  fetcher = fetchNewsDataPages,
+  fetcher = null,
   persister = persistNewsArticles,
   partyTagger = tagArticlesWithTyphoon,
   tagParties = true,
   maxPages,
+  providerConfig,
 } = {}) {
   if (!force && memoryCache && now() - memoryCache.cachedAt < NEWS_CACHE_TTL_MS) {
     return { ...memoryCache.value, cached: true };
   }
 
-  if (!process.env.NEWS_API_KEY && fetcher === fetchNewsDataPages) {
-    return { refreshed: false, skipped: "NEWS_API_KEY is not configured", cached: false };
-  }
+  const configuredProvider = providerConfig || getNewsProviderConfig();
+  const selectedFetcher = fetcher || configuredProvider.fetchPages;
+  if (!fetcher && !configuredProvider.configured) return { refreshed: false, skipped: `${configuredProvider.name} provider is not configured`, cached: false };
+  if (!selectedFetcher) return { refreshed: false, skipped: `Unsupported news provider: ${configuredProvider.name}`, cached: false };
 
   if (ingestionInProgress) {
     return { refreshed: false, skipped: "another ingestion is already running", cached: false, inProgress: true };
@@ -39,7 +41,7 @@ export async function refreshNews({
 
   ingestionInProgress = true;
   try {
-    const fetched = fetcher === fetchNewsDataPages ? await fetcher({ maxPages }) : await fetcher();
+    const fetched = await selectedFetcher({ apiKey: configuredProvider.apiKey, feeds: configuredProvider.feeds, maxPages });
     const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
     const tagging = tagParties && isDatabaseConfigured && persisted?.articles?.length
       ? await partyTagger(persisted.articles)

@@ -2,11 +2,13 @@
 
 POLISCOPE is a small full-stack political news briefing MVP for YWC: **เข้าใจข่าวการเมืองในไม่กี่นาที**.
 
-It fetches Thai politics articles from NewsData.io, stores normalized records in Supabase PostgreSQL, exposes verified party relationships, and can stream a neutral Thai summary from Typhoon AI.
+It fetches Thai politics articles from Currents API, stores normalized records in Supabase PostgreSQL, exposes verified party relationships, and can stream a neutral Thai summary from Typhoon AI.
 
 ## Features
 
-- Thai political news ingestion from NewsData.io (`country=th`, `language=th`, `category=politics`, `size=10`)
+- Thai political news ingestion from Currents v2 Search (`country=TH`, `language=th`, `category=politics_government`, `page_size=10`)
+- Explicit category and language validation before an article is stored; the database keeps the existing `politics` category used by feed and analytics queries
+- Optional, opt-in RSS adapter for configured Thai publisher feeds; RSS items must carry an explicit political category and are never scraped beyond the feed response
 - Cursor-based ingestion of up to `NEWS_MAX_PAGES` pages per manual/cron run, with the homepage limited to one refresh page
 - URL/provider-ID deduplication and a 15-minute in-memory refresh cache
 - Protected Vercel Cron ingestion plus `npm run ingest:news` for manual collection
@@ -24,19 +26,21 @@ It fetches Thai politics articles from NewsData.io, stores normalized records in
 
 ```text
 React/Vite (dist) ── same-origin /api/* ── Express Function
-                                             ├── NewsData.io
+                                             ├── Currents API (preferred)
+                                             ├── Optional RSS feeds
+                                             ├── NewsData.io (legacy)
                                              ├── Typhoon AI
                                              └── Supabase PostgreSQL
 ```
 
-The browser never receives `DATABASE_URL`, `NEWS_API_KEY`, or `TYPHOON_API_KEY`. The application does not automatically execute `database/schema.sql`; the existing database remains authoritative.
+The browser never receives `DATABASE_URL`, `CURRENTS_API_KEY`, `NEWS_API_KEY`, or `TYPHOON_API_KEY`. The application does not automatically execute `database/schema.sql`; the existing database remains authoritative.
 
 ## Requirements
 
 - Node.js 22 or newer
 - npm
 - Existing Supabase PostgreSQL database with the expected tables
-- NewsData.io API key for live ingestion
+- Currents API key for preferred live ingestion
 - Typhoon API key for live summaries
 
 ## Local setup
@@ -51,7 +55,10 @@ The browser never receives `DATABASE_URL`, `NEWS_API_KEY`, or `TYPHOON_API_KEY`.
 
    ```env
    DATABASE_URL=postgresql://...
-   NEWS_API_KEY=...
+   NEWS_PROVIDER=currents
+   CURRENTS_API_KEY=...
+   RSS_FEEDS=
+   NEWS_API_KEY=... # only when NEWS_PROVIDER=newsdata
    NEWS_MAX_PAGES=3
    TYPHOON_API_KEY=...
    TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
@@ -143,17 +150,24 @@ The repository is prepared for the existing Vercel project `poliscope-ywc-react`
 - `dist/` is the Vite output directory.
 - `api/index.js` exposes the Express application as the server function.
 - `vercel.json` routes `/api/*` to Express and all other paths to the React entrypoint.
-- Add `DATABASE_URL`, `NEWS_API_KEY`, `TYPHOON_API_KEY`, and `TYPHOON_MODEL` as server-side Vercel environment variables.
+- Add `DATABASE_URL`, `NEWS_PROVIDER=currents`, `CURRENTS_API_KEY`, `TYPHOON_API_KEY`, and `TYPHOON_MODEL` as server-side Vercel environment variables.
+- Set `RSS_FEEDS` only when deliberately using `NEWS_PROVIDER=rss`; set `NEWS_API_KEY` only when deliberately using the legacy `NEWS_PROVIDER=newsdata` adapter.
 - Add `CRON_SECRET` and optionally `NEWS_MAX_PAGES` as server-side Vercel environment variables.
 - Use the Supabase pooler URL and keep secrets out of Vite client variables.
 - Verify the project’s root directory is this repository and the framework/build settings match `npm run build` and `dist`.
 
 This repository does not deploy or push automatically. Before a release, run the local checks, then use the already-linked Vercel project and verify `/api/health`, `/api/news`, and a streamed summary in a preview deployment.
 
-Vercel Hobby cron is configured once per day. NewsData.io free-tier pagination and quotas limit how much history can be collected per run. The analytics dashboard reports only articles actually stored in PostgreSQL; a “30-day” view means collected articles published within the last 30 days, not all news published during that period. Trend comparison remains disabled until the database covers at least 14 calendar days.
+Vercel Hobby cron is configured once per day. Currents Free request and result quotas limit how much history can be collected per run. The analytics dashboard reports only articles actually stored in PostgreSQL; a “30-day” view means collected articles published within the last 30 days, not all news published during that period. Trend comparison remains disabled until the database covers at least 14 calendar days.
 
 Reference: [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite), [Vercel Express deployment](https://vercel.com/docs/frameworks/backend/express), and [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build).
 
+## News provider notes
+
+Currents v2 is the preferred provider because its Search API documents the `politics_government` taxonomy, Thai language filtering, and cursor pagination. The application does not silently replace Thai results with international results when the provider returns too few articles. Verify actual Thai volume with `npm run ingest:news` after adding a Currents key. The free plan may return only a limited text preview, so POLISCOPE preserves the provider's available `description`/`content` and keeps the original source link.
+
+NewsData remains available only as an explicit legacy adapter (`NEWS_PROVIDER=newsdata`). The current application does not request NewsData `full_content=1`; a paid-plan error from that feature or from the account is not treated as a reason to mix providers. RSS is a separate explicit adapter (`NEWS_PROVIDER=rss`, `RSS_FEEDS=url1,url2`) and accepts only feed items with an explicit political category.
+
 ## Verification status
 
-Mocked provider, hashing, streaming, query, refresh-policy, and HTTP validation tests are included. Live NewsData, Supabase, Typhoon, and Vercel deployment verification require the corresponding credentials and explicit deployment approval.
+Mocked provider, hashing, streaming, query, refresh-policy, and HTTP validation tests are included. Live Currents, RSS, Supabase, Typhoon, and Vercel deployment verification require the corresponding credentials and explicit deployment approval.

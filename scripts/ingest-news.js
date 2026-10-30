@@ -1,9 +1,11 @@
 import "dotenv/config";
 import { isDatabaseConfigured } from "../server/db/pool.js";
 import { refreshNews } from "../server/news/service.js";
+import { getNewsProviderConfig } from "../server/news/provider.js";
 
-if (!isDatabaseConfigured || !process.env.NEWS_API_KEY) {
-  console.error("News ingestion requires DATABASE_URL and NEWS_API_KEY in the server environment.");
+const provider = getNewsProviderConfig();
+if (!isDatabaseConfigured || !provider.configured) {
+  console.error(`News ingestion requires DATABASE_URL and ${provider.name === "currents" ? "CURRENTS_API_KEY" : "NEWS_API_KEY"} in the server environment.`);
   process.exitCode = 1;
 } else {
   try {
