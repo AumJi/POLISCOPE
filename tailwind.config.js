@@ -5,6 +5,7 @@ export default {
     extend: {
       colors: {
         navy: "#13213A",
+        marketscope: "#3157A5",
         poliscope: "#3157A5",
         canvas: "#F7F8FA",
       },
