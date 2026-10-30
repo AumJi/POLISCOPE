@@ -6,7 +6,7 @@ BEGIN;
 
 UPDATE article_parties ap
 SET is_reviewed = true,
-    tagging_method = 'manual_review'
+    tagging_method = 'manual'
 FROM articles a
 INNER JOIN political_parties p ON p.id = ap.party_id
 WHERE ap.article_id = a.id

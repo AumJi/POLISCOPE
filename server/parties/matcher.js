@@ -12,7 +12,7 @@ export function normalizePartyMatchText(value) {
     .trim();
 }
 
-function getPartyTerms(party, aliasesByCode = VERIFIED_PARTY_ALIASES) {
+export function getPartyMatchTerms(party, aliasesByCode = VERIFIED_PARTY_ALIASES) {
   const aliases = aliasesByCode[party.party_code] || aliasesByCode[party.code] || [];
   return [...new Set([
     party.name,
@@ -26,7 +26,7 @@ export function findPartyMatches(article, parties, aliasesByCode = VERIFIED_PART
   if (!text) return [];
 
   return parties
-    .filter((party) => getPartyTerms(party, aliasesByCode).some((term) => text.includes(term)))
+    .filter((party) => getPartyMatchTerms(party, aliasesByCode).some((term) => text.includes(term)))
     .map((party) => ({
       partyId: party.id,
       partyCode: party.party_code || party.code,
@@ -35,14 +35,22 @@ export function findPartyMatches(article, parties, aliasesByCode = VERIFIED_PART
     }));
 }
 
-export function buildPartyAssociationQuery({ articleId, partyId, relationType = "mentioned", taggingMethod = "name_match" }) {
+export function buildPartyAssociationQuery({ articleId, partyId, relationType = "mentioned", taggingMethod = "ai" }) {
   return {
     text: `
       INSERT INTO article_parties (
         article_id, party_id, relation_type, tagging_method, is_reviewed
       )
       VALUES ($1, $2, $3, $4, false)
-      ON CONFLICT (article_id, party_id) DO NOTHING
+      ON CONFLICT (article_id, party_id) DO UPDATE SET
+        relation_type = CASE
+          WHEN article_parties.is_reviewed THEN article_parties.relation_type
+          ELSE EXCLUDED.relation_type
+        END,
+        tagging_method = CASE
+          WHEN article_parties.is_reviewed THEN article_parties.tagging_method
+          ELSE EXCLUDED.tagging_method
+        END
       RETURNING article_id
     `,
     values: [articleId, partyId, relationType, taggingMethod],

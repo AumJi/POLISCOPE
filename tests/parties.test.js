@@ -29,8 +29,8 @@ describe("political party association suggestions", () => {
   it("creates pending, deduplicated association queries", () => {
     const result = buildPartyAssociationQuery({ articleId: "article-1", partyId: "party-1" });
 
-    expect(result.values).toEqual(["article-1", "party-1", "mentioned", "name_match"]);
+    expect(result.values).toEqual(["article-1", "party-1", "mentioned", "ai"]);
     expect(result.text).toContain("is_reviewed");
-    expect(result.text).toContain("ON CONFLICT (article_id, party_id) DO NOTHING");
+    expect(result.text).toContain("ON CONFLICT (article_id, party_id) DO UPDATE");
   });
 });

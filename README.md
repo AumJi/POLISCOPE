@@ -11,7 +11,7 @@ It fetches Thai politics articles from NewsData.io, stores normalized records in
 - URL/provider-ID deduplication and a 15-minute in-memory refresh cache
 - Protected Vercel Cron ingestion plus `npm run ingest:news` for manual collection
 - PostgreSQL persistence for sources, articles, summaries, parties, and reviewed article-party relationships
-- Deterministic party association suggestions during ingestion using seeded party names, short names, and explicitly verified aliases
+- Candidate-constrained Typhoon party extraction using seeded party names, short names, and explicitly verified aliases
 - Party filtering with `GET /api/news?party=PARTY_CODE`
 - Reviewed-only party counts and article relationships in public responses
 - Manual review SQL workflow for approving pending article-party suggestions
@@ -78,6 +78,7 @@ npm run dev       # Vite + Express development servers
 npm run build     # production frontend build in dist/
 npm test          # mocked/unit/API tests
 npm run ingest:news # manually collect up to NEWS_MAX_PAGES provider pages
+npm run retag:parties # backfill political-party suggestions for stored political articles
 ```
 
 ## Database
@@ -86,7 +87,8 @@ npm run ingest:news # manually collect up to NEWS_MAX_PAGES provider pages
 - `database/migrations/001_analytics_indexes.sql` is a review-before-apply, non-destructive migration. It is not executed by the application.
 - `database/manual-party-tagging.sql` is a placeholder-based manual tagging template. Replace its values only after verifying the article text and party relationship.
 - `database/review-party-association.sql` approves an existing `is_reviewed = false` suggestion by exact article URL and party code. It does not create new associations.
-- Party matching runs inside the news persistence transaction. It checks only article title and description, never politician names, AI output, or scraped article content. Add aliases to `server/parties/matcher.js` only after verifying them against an authoritative party source.
+- Party candidates are loaded from `political_parties`; Typhoon receives only those candidates and the article text. The backend accepts only existing party codes, allowed relation types, and evidence traceable to the supplied text. It never creates party rows from AI output.
+- `npm run retag:parties` processes existing political articles sequentially. It writes only `is_reviewed = false` AI suggestions and preserves reviewed associations. The normal ingestion path only sends newly inserted articles to Typhoon, so page opens do not repeat tagging calls.
 - No migration or startup script drops, overwrites, or automatically alters existing tables.
 
 Expected relationships:

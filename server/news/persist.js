@@ -1,10 +1,10 @@
 import { withTransaction } from "../db/query.js";
-import { buildPartyAssociationQuery, findPartyMatches } from "../parties/matcher.js";
+import { findPartyMatches } from "../parties/matcher.js";
 
 export async function persistNewsArticles(articles) {
   return withTransaction(async (client) => {
     let saved = 0;
-    let suggestedAssociations = 0;
+    const savedArticles = [];
 
     const partiesResult = await client.query(`
       SELECT id, party_code, name, short_name
@@ -34,6 +34,7 @@ export async function persistNewsArticles(articles) {
       `, [article.originalUrl, article.externalId, sourceId]);
 
       let articleId;
+      const isNew = !existingResult.rows[0];
       if (existingResult.rows[0]) {
         articleId = existingResult.rows[0].id;
         await client.query(`
@@ -82,20 +83,11 @@ export async function persistNewsArticles(articles) {
       }
 
       const matches = findPartyMatches(article, parties);
-      for (const match of matches) {
-        const associationQuery = buildPartyAssociationQuery({
-          articleId,
-          partyId: match.partyId,
-          relationType: match.relationType,
-          taggingMethod: match.taggingMethod,
-        });
-        const associationResult = await client.query(associationQuery.text, associationQuery.values);
-        suggestedAssociations += associationResult.rowCount;
-      }
+      savedArticles.push({ ...article, id: articleId, isNew, candidateMatches: matches });
 
       saved += 1;
     }
 
-    return { saved, suggestedAssociations };
+    return { saved, suggestedAssociations: 0, articles: savedArticles };
   });
 }

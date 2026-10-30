@@ -1,6 +1,7 @@
 import { isDatabaseConfigured } from "../db/pool.js";
 import { persistNewsArticles } from "./persist.js";
 import { fetchNewsDataPages } from "./newsData.js";
+import { tagArticlesWithTyphoon } from "../parties/tagging.js";
 
 export const NEWS_CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -38,11 +39,15 @@ export async function refreshNews({
   try {
     const fetched = fetcher === fetchNewsDataPages ? await fetcher({ maxPages }) : await fetcher();
     const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
+    const tagging = isDatabaseConfigured && persisted?.articles?.length
+      ? await tagArticlesWithTyphoon(persisted.articles)
+      : null;
     const savedCount = typeof persisted === "number" ? persisted : persisted?.saved || 0;
     const value = {
       refreshed: true,
       savedCount,
-      suggestedAssociations: typeof persisted === "number" ? 0 : persisted?.suggestedAssociations || 0,
+      suggestedAssociations: typeof persisted === "number" ? 0 : (persisted?.suggestedAssociations || 0) + (tagging?.deterministic || 0) + (tagging?.aiSuggested || 0),
+      partyTagging: tagging,
       articleCount: fetched.articles.length,
       pagesFetched: fetched.pagesFetched || 1,
       totalResults: fetched.totalResults,
