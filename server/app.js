@@ -1,6 +1,7 @@
 import express from "express";
 import { isDatabaseConfigured } from "./db/pool.js";
 import { countNews, findArticleById, listNews, listParties } from "./db/repository.js";
+import { countInvestmentNews, findInvestmentArticleById, listInvestmentNews } from "./db/investmentRepository.js";
 import {
   buildSummaryInput,
   createTyphoonClient,
@@ -32,7 +33,7 @@ function withTimeout(promise, milliseconds) {
 app.get("/api/health", (_request, response) => {
   response.json({
     status: "ok",
-    service: "poliscope-api",
+    service: "marketscope-api",
     environment: {
       database: isDatabaseConfigured,
       newsProvider: getNewsProviderConfig().name,
@@ -47,15 +48,28 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.get("/api/news", async (request, response, next) => {
+  const category = typeof request.query.category === "string" ? request.query.category.trim().toLowerCase() : "investment";
   const partyCode = typeof request.query.party === "string" ? request.query.party.trim() : undefined;
   const sourceKey = typeof request.query.source === "string" ? request.query.source.trim() : undefined;
+  const assetSymbol = typeof request.query.asset === "string" ? request.query.asset.trim().toUpperCase() : undefined;
   const includeUnreviewed = request.query.includeUnreviewed === "true";
+  const limit = Math.min(Math.max(Number(request.query.limit) || 20, 1), 50);
+
+  if (!['investment', 'politics'].includes(category)) {
+    return response.status(400).json({ error: "category must be investment or politics" });
+  }
+  if (category === "investment" && partyCode) {
+    return response.status(400).json({ error: "party filter is only available for political news" });
+  }
 
   if (partyCode && !/^[a-zA-Z0-9_-]{1,120}$/.test(partyCode)) {
     return response.status(400).json({ error: "Invalid party code" });
   }
   if (sourceKey && !/^[a-zA-Z0-9_.-]{1,120}$/.test(sourceKey)) {
     return response.status(400).json({ error: "Invalid source key" });
+  }
+  if (assetSymbol && !/^[A-Z0-9]{2,12}$/.test(assetSymbol)) {
+    return response.status(400).json({ error: "Invalid asset symbol" });
   }
 
   if (!isDatabaseConfigured) {
@@ -65,17 +79,24 @@ app.get("/api/news", async (request, response, next) => {
   let refresh = { refreshed: false };
   let refreshError = null;
 
-  try {
-    refresh = await refreshNews({ maxPages: 1, tagParties: false });
-  } catch (error) {
-    refreshError = error;
+  if (category === "investment") {
+    try {
+      refresh = await refreshNews({ maxPages: 1, tagParties: false });
+    } catch (error) {
+      refreshError = error;
+    }
   }
 
   try {
-    const [articles, total] = await Promise.all([
-      listNews({ partyCode, sourceKey, limit: 10, includeUnreviewed }),
-      countNews({ partyCode, sourceKey, includeUnreviewed }),
-    ]);
+    const [articles, total] = category === "investment"
+      ? await Promise.all([
+        listInvestmentNews({ sourceKey, assetSymbol, limit, includeUnreviewed }),
+        countInvestmentNews({ sourceKey, assetSymbol, includeUnreviewed }),
+      ])
+      : await Promise.all([
+        listNews({ partyCode, sourceKey, limit, includeUnreviewed }),
+        countNews({ partyCode, sourceKey, includeUnreviewed }),
+      ]);
     if (refreshError && articles.length === 0) throw refreshError;
 
     response.json({
@@ -87,6 +108,7 @@ app.get("/api/news", async (request, response, next) => {
         cached: refresh.cached ?? false,
         stale: Boolean(refreshError),
         includeUnreviewed,
+        category,
       },
     });
   } catch (error) {
@@ -135,9 +157,9 @@ app.get("/api/news/:id", async (request, response, next) => {
   }
 
   try {
-    const article = await findArticleById(request.params.id, {
-      includeUnreviewed: request.query.includeUnreviewed === "true",
-    });
+    const article = request.query.category === "politics"
+      ? await findArticleById(request.params.id, { includeUnreviewed: request.query.includeUnreviewed === "true" })
+      : await findInvestmentArticleById(request.params.id, { includeUnreviewed: request.query.includeUnreviewed === "true" });
     if (!article) return response.status(404).json({ error: "Article not found" });
     response.json({ article });
   } catch (error) {
@@ -174,7 +196,7 @@ app.post("/api/summarize", async (request, response) => {
 
   let article;
   try {
-    article = await findArticleById(articleId);
+    article = await findInvestmentArticleById(articleId) || await findArticleById(articleId);
   } catch (error) {
     return response.status(500).json({ error: "Unable to load article", code: error.code || "DATABASE_ERROR" });
   }
