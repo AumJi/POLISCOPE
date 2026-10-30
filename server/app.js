@@ -1,6 +1,16 @@
 import express from "express";
 import { isDatabaseConfigured } from "./db/pool.js";
 import { listNews, listParties } from "./db/repository.js";
+import { findArticleById } from "./db/repository.js";
+import {
+  buildSummaryInput,
+  createTyphoonClient,
+  findCachedSummary,
+  hashSummaryInput,
+  isUuid,
+  saveSummary,
+  streamSummary,
+} from "./ai/summarize.js";
 import { refreshNews } from "./news/service.js";
 
 const app = express();
@@ -66,6 +76,97 @@ app.get("/api/parties", async (_request, response, next) => {
     response.json({ parties: await listParties() });
   } catch (error) {
     next(error);
+  }
+});
+
+function writeSseEvent(response, event, data) {
+  response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+app.post("/api/summarize", async (request, response) => {
+  const articleId = request.body?.articleId;
+
+  if (!isUuid(articleId)) {
+    return response.status(400).json({ error: "articleId must be a valid UUID" });
+  }
+
+  if (!isDatabaseConfigured) {
+    return response.status(503).json({ error: "Database is not configured" });
+  }
+
+  let article;
+  try {
+    article = await findArticleById(articleId);
+  } catch (error) {
+    return response.status(500).json({ error: "Unable to load article", code: error.code || "DATABASE_ERROR" });
+  }
+
+  if (!article) {
+    return response.status(404).json({ error: "Article not found" });
+  }
+
+  const input = buildSummaryInput(article);
+  const inputHash = hashSummaryInput(input);
+  const modelName = process.env.TYPHOON_MODEL || "typhoon-v2.5-30b-a3b-instruct";
+
+  let cached;
+  try {
+    cached = await findCachedSummary(articleId, inputHash);
+  } catch (error) {
+    return response.status(500).json({ error: "Unable to check summary cache", code: error.code || "DATABASE_ERROR" });
+  }
+
+  response.status(200);
+  response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  response.setHeader("Cache-Control", "no-cache, no-transform");
+  response.setHeader("Connection", "keep-alive");
+  response.setHeader("X-Accel-Buffering", "no");
+  response.flushHeaders?.();
+
+  if (cached) {
+    writeSseEvent(response, "complete", {
+      summary: cached.summaryText,
+      cached: true,
+      saved: true,
+      modelName: cached.modelName,
+      createdAt: cached.createdAt,
+    });
+    return response.end();
+  }
+
+  let clientClosed = false;
+  response.on("close", () => {
+    if (!response.writableEnded) clientClosed = true;
+  });
+
+  try {
+    const client = createTyphoonClient();
+    const summary = await streamSummary({
+      article,
+      input,
+      client,
+      model: modelName,
+      onDelta: (delta) => {
+        if (!clientClosed) writeSseEvent(response, "delta", { text: delta });
+      },
+    });
+
+    const saved = await saveSummary({ articleId, modelName, inputHash, summaryText: summary });
+    if (!clientClosed) {
+      writeSseEvent(response, "complete", {
+        summary: saved.summaryText,
+        cached: false,
+        saved: true,
+        modelName: saved.modelName,
+        createdAt: saved.createdAt,
+      });
+    }
+  } catch (error) {
+    if (!clientClosed) {
+      writeSseEvent(response, "error", { error: error.message || "Unable to generate summary", code: error.code || "TYPHOON_ERROR" });
+    }
+  } finally {
+    if (!response.writableEnded) response.end();
   }
 });
 
