@@ -94,6 +94,7 @@ npm run retag:parties # backfill political-party suggestions for stored politica
 - `database/migrations/001_analytics_indexes.sql` is a review-before-apply, non-destructive migration. It is not executed by the application.
 - `database/manual-party-tagging.sql` is a placeholder-based manual tagging template. Replace its values only after verifying the article text and party relationship.
 - `database/review-party-association.sql` approves an existing `is_reviewed = false` suggestion by exact article URL and party code. It does not create new associations.
+- `database/review-asset-association.sql` is the equivalent manual workflow for approving or rejecting an asset suggestion.
 - Party candidates are loaded from `political_parties`; Typhoon receives only those candidates and the article text. The backend accepts only existing party codes, allowed relation types, and evidence traceable to the supplied text. It never creates party rows from AI output.
 - `npm run retag:parties` processes existing political articles sequentially. It writes only `is_reviewed = false` AI suggestions and preserves reviewed associations. The normal ingestion path only sends newly inserted articles to Typhoon, so page opens do not repeat tagging calls.
 - The public news request does not wait for Typhoon tagging; scheduled/manual ingestion performs the slower AI tagging workflow so the feed remains responsive.

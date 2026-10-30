@@ -12,9 +12,9 @@ async function* fakeStream() {
   yield { choices: [{ delta: { content: "ข้อมูลสำคัญ" } }] };
 }
 
-describe("Typhoon summary helpers", () => {
+describe("Typhoon financial summary helpers", () => {
   it("creates deterministic SHA-256 input hashes", () => {
-    const input = buildSummaryInput({ title: "ข่าว", description: "ข้อความ" });
+    const input = buildSummaryInput({ title: "ข่าว", description: "ข้อมูล" });
     expect(hashSummaryInput(input)).toHaveLength(64);
     expect(hashSummaryInput(input)).toBe(hashSummaryInput(input));
     expect(hashSummaryInput(input)).not.toBe(hashSummaryInput(`${input}!`));
@@ -26,11 +26,12 @@ describe("Typhoon summary helpers", () => {
     expect(buildSummaryInput({ title: "หัวข้อ", content: "x".repeat(20_000) }).length).toBeLessThan(12_200);
   });
 
-  it("contains the required neutral Thai summary guidance", () => {
+  it("contains neutral financial summary guidance", () => {
     expect(SUMMARY_SYSTEM_PROMPT).toContain("สรุปข่าว");
     expect(SUMMARY_SYSTEM_PROMPT).toContain("ประเด็นสำคัญ");
     expect(SUMMARY_SYSTEM_PROMPT).toContain("สิ่งที่ยังไม่ชัดเจน");
-    expect(SUMMARY_SYSTEM_PROMPT).toContain("ห้ามแต่งเติมข้อมูล");
+    expect(SUMMARY_SYSTEM_PROMPT).toContain("ห้ามสร้างราคา");
+    expect(SUMMARY_SYSTEM_PROMPT).toContain("ห้ามให้คำแนะนำซื้อ");
   });
 
   it("validates UUIDs", () => {
@@ -41,14 +42,7 @@ describe("Typhoon summary helpers", () => {
   it("collects streamed deltas and returns only a completed summary", async () => {
     const onDelta = vi.fn();
     const client = { chat: { completions: { create: vi.fn().mockResolvedValue(fakeStream()) } } };
-
-    const summary = await streamSummary({
-      article: { title: "ข่าว", content: "ข้อความ" },
-      client,
-      onDelta,
-      model: "test-model",
-    });
-
+    const summary = await streamSummary({ article: { title: "ข่าว", content: "ข้อมูล" }, client, onDelta, model: "test-model" });
     expect(summary).toBe("สรุปข่าว\nข้อมูลสำคัญ");
     expect(onDelta).toHaveBeenCalledTimes(2);
     expect(client.chat.completions.create).toHaveBeenCalledWith(expect.objectContaining({ stream: true, temperature: 0.1 }));
