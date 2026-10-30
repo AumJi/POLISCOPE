@@ -1,6 +1,6 @@
 import express from "express";
 import { isDatabaseConfigured } from "./db/pool.js";
-import { listNews } from "./db/repository.js";
+import { listNews, listParties } from "./db/repository.js";
 import { refreshNews } from "./news/service.js";
 
 const app = express();
@@ -52,6 +52,18 @@ app.get("/api/news", async (request, response, next) => {
         stale: Boolean(refreshError),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/parties", async (_request, response, next) => {
+  if (!isDatabaseConfigured) {
+    return response.status(503).json({ error: "Database is not configured" });
+  }
+
+  try {
+    response.json({ parties: await listParties() });
   } catch (error) {
     next(error);
   }

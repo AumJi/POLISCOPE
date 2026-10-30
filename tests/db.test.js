@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNewsQuery, mapArticleRow } from "../server/db/repository.js";
+import { buildNewsQuery, mapArticleRow, mapPartyRow } from "../server/db/repository.js";
 
 describe("database repository", () => {
   it("builds a parameterized news query with a party filter", () => {
@@ -30,6 +30,26 @@ describe("database repository", () => {
       externalId: "provider-id",
       originalUrl: "https://example.com/article",
       parties: [],
+    });
+  });
+
+  it("maps party records for the public API", () => {
+    expect(mapPartyRow({
+      id: "party-id",
+      party_code: "DEMO",
+      name: "Demo Party",
+      short_name: "Demo",
+      country_code: "TH",
+      official_website_url: "https://example.com",
+      logo_url: null,
+    })).toEqual({
+      id: "party-id",
+      code: "DEMO",
+      name: "Demo Party",
+      shortName: "Demo",
+      countryCode: "TH",
+      officialWebsiteUrl: "https://example.com",
+      logoUrl: null,
     });
   });
 });

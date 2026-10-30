@@ -94,7 +94,11 @@ export async function listParties() {
     ORDER BY name ASC
   `);
 
-  return result.rows.map((row) => ({
+  return result.rows.map(mapPartyRow);
+}
+
+export function mapPartyRow(row) {
+  return {
     id: row.id,
     code: row.party_code,
     name: row.name,
@@ -102,7 +106,7 @@ export async function listParties() {
     countryCode: row.country_code,
     officialWebsiteUrl: row.official_website_url,
     logoUrl: row.logo_url,
-  }));
+  };
 }
 
 export async function findArticleById(articleId) {
