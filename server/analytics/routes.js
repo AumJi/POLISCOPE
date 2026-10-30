@@ -10,6 +10,8 @@ import {
   parseAnalyticsRange,
 } from "./repository.js";
 import { buildTopicAnalysis } from "./topics.js";
+import { getInvestmentAnalyticsOverview, getInvestmentAssetCounts, getInvestmentNewsVolume, getInvestmentTopicArticles, parseMarketAnalyticsRange } from "./marketRepository.js";
+import { buildInvestmentTopicAnalysis } from "./investmentTopics.js";
 
 const router = express.Router();
 const FILTER_PATTERN = /^[a-zA-Z0-9_.-]{1,120}$/;
@@ -45,8 +47,28 @@ function requireDatabase(_request, response) {
 
 router.get("/overview", asyncRoute(async (request, response) => {
   if (!requireDatabase(request, response)) return;
-  const { key } = parseAnalyticsRange(request.query.range, "30d");
-  response.json({ overview: await getAnalyticsOverview({ range: key, ...getFilters(request) }) });
+  const { key } = parseMarketAnalyticsRange(request.query.range, "30d");
+  response.json({ overview: await getInvestmentAnalyticsOverview({ range: key }) });
+}));
+
+router.get("/news-volume", asyncRoute(async (request, response) => {
+  if (!requireDatabase(request, response)) return;
+  const { key } = parseMarketAnalyticsRange(request.query.range, "30d");
+  const assetSymbol = typeof request.query.asset === "string" ? request.query.asset.toUpperCase() : undefined;
+  response.json(await getInvestmentNewsVolume({ range: key, assetSymbol }));
+}));
+
+router.get("/asset-news", asyncRoute(async (request, response) => {
+  if (!requireDatabase(request, response)) return;
+  const { key } = parseMarketAnalyticsRange(request.query.range, "30d");
+  response.json(await getInvestmentAssetCounts({ range: key }));
+}));
+
+router.get("/investment-topics", asyncRoute(async (request, response) => {
+  if (!requireDatabase(request, response)) return;
+  const { key, days } = parseMarketAnalyticsRange(request.query.range, "30d");
+  const articles = await getInvestmentTopicArticles({ days });
+  response.json({ selectedRange: key, analysisType: "keyword_frequency", topics: buildInvestmentTopicAnalysis(articles), articleCount: articles.length });
 }));
 
 router.get("/timeline", asyncRoute(async (request, response) => {
