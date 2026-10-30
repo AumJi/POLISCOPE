@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { findAssetMatches, matchesAsset } from "../server/assets/matcher.js";
 
 const assets = [
-  { id: "gold-id", symbol: "XAU" },
+    { id: "gold-id", symbol: "XAUUSD" },
   { id: "fx-id", symbol: "USDTHB" },
   { id: "apple-id", symbol: "AAPL" },
   { id: "voo-id", symbol: "VOO" },
@@ -10,7 +10,7 @@ const assets = [
 
 describe("investment asset matching", () => {
   it("matches explicit gold, FX pair, stock, and ETF context", () => {
-    expect(matchesAsset("ราคาทองคำ XAU/USD ปรับตัวสูงขึ้น", { symbol: "XAU" })).toBe(true);
+    expect(matchesAsset("ราคาทองคำ XAU/USD ปรับตัวสูงขึ้น", { symbol: "XAUUSD" })).toBe(true);
     expect(matchesAsset("USD/THB ขยับจากเงินบาทอ่อนค่า", { symbol: "USDTHB" })).toBe(true);
     expect(matchesAsset("Apple หุ้น AAPL รายงานกำไร", { symbol: "AAPL" })).toBe(true);
     expect(matchesAsset("นักลงทุนจับตา VOO ETF", { symbol: "VOO" })).toBe(true);
@@ -23,8 +23,8 @@ describe("investment asset matching", () => {
 
   it("returns each matched asset once", () => {
     expect(findAssetMatches({ title: "ราคาทองคำและ USD/THB", description: "", content: "" }, assets)).toEqual([
-      expect.objectContaining({ symbol: "XAU", taggingMethod: "name_match" }),
-      expect.objectContaining({ symbol: "USDTHB", taggingMethod: "name_match" }),
+      expect.objectContaining({ symbol: "XAUUSD", taggingMethod: "ai" }),
+      expect.objectContaining({ symbol: "USDTHB", taggingMethod: "ai" }),
     ]);
   });
 });

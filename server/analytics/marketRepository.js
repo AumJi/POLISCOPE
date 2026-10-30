@@ -74,7 +74,7 @@ export async function getInvestmentAssetCounts({ range = "30d" } = {}) {
       SELECT ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - ($1::int - 1)) AS start_date,
              (NOW() AT TIME ZONE 'Asia/Bangkok')::date AS end_date
     )
-    SELECT ma.symbol, ma.name, ma.asset_type, ma.category, COUNT(DISTINCT a.id)::int AS article_count
+    SELECT ma.symbol, ma.name, ma.asset_class, COUNT(DISTINCT a.id)::int AS article_count
     FROM market_assets ma
     LEFT JOIN article_assets aa ON aa.asset_id = ma.id AND aa.is_reviewed = true
     LEFT JOIN articles a ON a.id = aa.article_id AND LOWER(a.category) = 'investment'
@@ -82,7 +82,7 @@ export async function getInvestmentAssetCounts({ range = "30d" } = {}) {
       AND a.published_at < (((SELECT end_date FROM bounds) + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')
     GROUP BY ma.id ORDER BY ma.name ASC
   `, [days]);
-  return { selectedRange: key, assets: result.rows.map((row) => ({ symbol: row.symbol, name: row.name, assetType: row.asset_type, category: row.category, articleCount: row.article_count || 0 })) };
+  return { selectedRange: key, assets: result.rows.map((row) => ({ symbol: row.symbol, name: row.name, assetType: row.asset_class, category: row.asset_class, articleCount: row.article_count || 0 })) };
 }
 
 export async function getInvestmentTopicArticles({ days = 30 } = {}) {

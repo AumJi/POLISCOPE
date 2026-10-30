@@ -24,8 +24,8 @@ export function getNewsProviderConfig(env = process.env) {
       fetchOptions: {
         category: investmentNews ? "economy_business_finance" : "politics_government",
         outputCategory: investmentNews ? "investment" : "politics",
-        language: env.NEWS_LANGUAGE || "th",
-        country: env.NEWS_COUNTRY || "TH",
+        language: env.NEWS_LANGUAGE || "en",
+        country: env.NEWS_COUNTRY || "US",
       },
     };
   }

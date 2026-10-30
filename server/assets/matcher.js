@@ -13,7 +13,7 @@ function hasMarketContext(text) {
 export function matchesAsset(text, asset) {
   const normalized = normalizeText(text);
   const symbol = String(asset.symbol || "").toUpperCase();
-  if (symbol === "XAU") return hasAny(normalized, ["xau/usd", "xauusd", "ทองคำ", "ราคาทอง", "gold"]);
+  if (symbol === "XAU" || symbol === "XAUUSD") return hasAny(normalized, ["xau/usd", "xauusd", "ทองคำ", "ราคาทอง", "gold"]);
   if (symbol === "WTI") return hasAny(normalized, ["wti", "west texas intermediate", "น้ำมันดิบ wti"]);
   if (symbol === "USDTHB") {
     return hasAny(normalized, ["usd/thb", "usdthb", "ดอลลาร์สหรัฐ/บาท", "ดอลลาร์/บาท", "เงินบาทต่อดอลลาร์"])
@@ -31,6 +31,6 @@ export function findAssetMatches(article, assets) {
     assetId: asset.id,
     symbol: asset.symbol,
     relationType: "mentioned",
-    taggingMethod: "name_match",
+    taggingMethod: "ai",
   }));
 }

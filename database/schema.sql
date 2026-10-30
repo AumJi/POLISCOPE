@@ -70,37 +70,32 @@ CREATE TABLE IF NOT EXISTS market_assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol VARCHAR(32) NOT NULL UNIQUE,
   name VARCHAR(255) NOT NULL,
-  asset_type VARCHAR(32) NOT NULL,
-  category VARCHAR(64) NOT NULL,
-  provider_symbol VARCHAR(32),
-  provider_function VARCHAR(64),
-  quote_currency VARCHAR(16) NOT NULL,
-  unit VARCHAR(64) NOT NULL,
+  asset_class VARCHAR(32) NOT NULL,
+  currency_code CHAR(3) NOT NULL,
+  quote_unit VARCHAR(64) NOT NULL,
+  data_provider VARCHAR(64) NOT NULL,
+  provider_symbol VARCHAR(64) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS market_prices (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   asset_id UUID NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
   price_date DATE NOT NULL,
-  open NUMERIC(20, 8),
-  high NUMERIC(20, 8),
-  low NUMERIC(20, 8),
-  close NUMERIC(20, 8) NOT NULL,
-  adjusted_close NUMERIC(20, 8),
+  open_price NUMERIC(20, 8),
+  high_price NUMERIC(20, 8),
+  low_price NUMERIC(20, 8),
+  close_price NUMERIC(20, 8) NOT NULL,
   volume NUMERIC(24, 4),
-  quote_currency VARCHAR(16) NOT NULL,
-  unit VARCHAR(64) NOT NULL,
-  source VARCHAR(64) NOT NULL,
-  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (asset_id, price_date)
+  retrieved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (asset_id, price_date)
 );
 
 CREATE TABLE IF NOT EXISTS article_assets (
   article_id UUID NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   asset_id UUID NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
   relation_type VARCHAR(120) NOT NULL DEFAULT 'mentioned',
-  tagging_method VARCHAR(120) NOT NULL DEFAULT 'name_match',
+  tagging_method VARCHAR(120) NOT NULL DEFAULT 'ai',
   is_reviewed BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (article_id, asset_id)

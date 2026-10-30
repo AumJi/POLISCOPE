@@ -111,11 +111,11 @@ function Header({ search, setSearch }) {
   return <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-4 sm:px-8 lg:px-10">
       <Brand />
-      <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-500 md:flex"><a href="/dashboard" className="hover:text-navy">Dashboard</a><a href="/news" className="hover:text-navy">ข่าวลงทุน</a><a href="/market/XAU" className="hover:text-navy">Market Explorer</a></nav>
+      <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-500 md:flex"><a href="/dashboard" className="hover:text-navy">Dashboard</a><a href="/news" className="hover:text-navy">ข่าวลงทุน</a><a href="/market/XAUUSD" className="hover:text-navy">Market Explorer</a></nav>
       <div className="hidden min-w-0 flex-1 justify-end sm:flex md:max-w-sm"><label className="relative block min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={search} onChange={(event) => setSearch?.(event.target.value)} placeholder="ค้นหาข่าวหรือสินทรัพย์" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-poliscope focus:bg-white focus:ring-4 focus:ring-blue-100" /></label></div>
       <button onClick={() => setOpen((value) => !value)} className="rounded-xl p-2 text-navy sm:hidden" aria-label="เปิดเมนู">{open ? <X size={22} /> : <Menu size={22} />}</button>
     </div>
-    {open && <div className="border-t border-slate-100 px-5 pb-5 pt-3 sm:hidden"><label className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={search} onChange={(event) => setSearch?.(event.target.value)} placeholder="ค้นหาข่าวหรือสินทรัพย์" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm outline-none" /></label><div className="mt-4 flex gap-4 text-sm font-semibold"><a href="/dashboard">Dashboard</a><a href="/news">ข่าวลงทุน</a><a href="/market/XAU">Market Explorer</a></div></div>}
+    {open && <div className="border-t border-slate-100 px-5 pb-5 pt-3 sm:hidden"><label className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} /><input value={search} onChange={(event) => setSearch?.(event.target.value)} placeholder="ค้นหาข่าวหรือสินทรัพย์" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-sm outline-none" /></label><div className="mt-4 flex gap-4 text-sm font-semibold"><a href="/dashboard">Dashboard</a><a href="/news">ข่าวลงทุน</a><a href="/market/XAUUSD">Market Explorer</a></div></div>}
   </header>;
 }
 
@@ -199,7 +199,7 @@ function NewsList({ asset, limit = 6 }) {
 
 function DashboardPage() {
   const [assets, setAssets] = useState([]);
-  const [selectedSymbol, setSelectedSymbol] = useState("XAU");
+  const [selectedSymbol, setSelectedSymbol] = useState("XAUUSD");
   const [range, setRange] = useState("30d");
   const [market, setMarket] = useState({ observations: [], analytics: null, loading: true });
   const [overview, setOverview] = useState(null);
@@ -238,7 +238,7 @@ function MarketExplorer({ symbol }) {
 function App() {
   const [pathname] = useState(() => window.location.pathname);
   if (pathname === "/news") return <InvestmentNewsPage />;
-  if (pathname.startsWith("/market/")) return <MarketExplorer symbol={pathname.split("/")[2]?.toUpperCase() || "XAU"} />;
+  if (pathname.startsWith("/market/")) return <MarketExplorer symbol={pathname.split("/")[2]?.toUpperCase() || "XAUUSD"} />;
   return <DashboardPage />;
 }
 

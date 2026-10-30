@@ -1,174 +1,154 @@
-# POLISCOPE
+# MARKETSCOPE
 
-POLISCOPE is a small full-stack political news briefing MVP for YWC: **เข้าใจข่าวการเมืองในไม่กี่นาที**.
+MARKETSCOPE is an educational investment intelligence dashboard for the YWC programming interview. It combines stored historical market observations, categorized investment news, source links, deterministic metrics, and neutral Thai Typhoon summaries.
 
-It fetches Thai politics articles from Currents API, stores normalized records in Supabase PostgreSQL, exposes verified party relationships, and can stream a neutral Thai summary from Typhoon AI.
+It is not a trading system and does not provide personalized buy/sell recommendations.
 
 ## Features
 
-- Thai political news ingestion from Currents v2 Search (`country=TH`, `language=th`, `category=politics_government`, `page_size=10`)
-- Explicit category and language validation before an article is stored; the database keeps the existing `politics` category used by feed and analytics queries
-- Optional, opt-in RSS adapter for configured Thai publisher feeds; RSS items must carry an explicit political category and are never scraped beyond the feed response
-- Cursor-based ingestion of up to `NEWS_MAX_PAGES` pages per manual/cron run, with the homepage limited to one refresh page
-- URL/provider-ID deduplication and a 15-minute in-memory refresh cache
-- Protected Vercel Cron ingestion plus `npm run ingest:news` for manual collection
-- PostgreSQL persistence for sources, articles, summaries, parties, and reviewed article-party relationships
-- Candidate-constrained Typhoon party extraction using seeded party names, short names, and explicitly verified aliases
-- Party filtering with `GET /api/news?party=PARTY_CODE`
-- Reviewed-only party counts and article relationships in public responses
-- Manual review SQL workflow for approving pending article-party suggestions
-- Typhoon streaming summaries over POST + Server-Sent Events
-- SHA-256 summary input hashing and database cache reuse
-- Responsive React/Vite dashboard with search, filters, skeletons, empty/error states, article details, source links, and AI disclaimer
-- `/analytics` dashboard with PostgreSQL-backed KPIs, Bangkok-time timeline, party/source counts, keyword topics, trend comparison, filters, and article drill-down
+- Dashboard for Gold/XAUUSD, WTI, USD/THB, AAPL, MSFT, and VOO ETF
+- Historical daily prices stored in PostgreSQL; no provider call on page load
+- 7d, 30d, and 90d price history
+- Percentage change, observation-based SMA 7/SMA 30, and realized daily-return volatility
+- Normalized comparison instead of comparing raw prices with different units
+- Investment news feed with category validation, source attribution, and original links
+- `article_assets` many-to-many relationships with unreviewed suggestions and manual review SQL
+- Typhoon AI streaming summaries with SHA-256 caching and financial-risk disclaimers
+- PostgreSQL-backed news volume, asset coverage, and keyword-frequency insights
+- Responsive React/Vite interface at `/dashboard`, `/news`, and `/market/:symbol`
 
 ## Architecture
 
 ```text
 React/Vite (dist) ── same-origin /api/* ── Express Function
-                                             ├── Currents API (preferred)
-                                             ├── Optional RSS feeds
-                                             ├── NewsData.io (legacy)
-                                             ├── Typhoon AI
-                                             └── Supabase PostgreSQL
+                                      ├── Alpha Vantage (historical prices)
+                                      ├── Currents v2 or configured RSS (investment news)
+                                      ├── Typhoon AI (summaries only)
+                                      └── Supabase PostgreSQL
 ```
 
-The browser never receives `DATABASE_URL`, `CURRENTS_API_KEY`, `NEWS_API_KEY`, or `TYPHOON_API_KEY`. The application does not automatically execute `database/schema.sql`; the existing database remains authoritative.
+Secrets are server-only. The browser never receives `DATABASE_URL`, `ALPHA_VANTAGE_API_KEY`, `CURRENTS_API_KEY`, or `TYPHOON_API_KEY`.
 
 ## Requirements
 
 - Node.js 22 or newer
 - npm
-- Existing Supabase PostgreSQL database with the expected tables
-- Currents API key for preferred live ingestion
-- Typhoon API key for live summaries
+- Existing Supabase PostgreSQL database
+- Migration `database/migrations/002_marketscope_market_data.sql` applied manually when the market tables are not already present
 
-## Local setup
+## Environment
 
-1. Install dependencies:
+Copy `.env.example` to `.env`:
 
-   ```bash
-   npm install
-   ```
+```env
+DATABASE_URL=postgresql://...
+ALPHA_VANTAGE_API_KEY=...
+TYPHOON_API_KEY=...
+TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
+CRON_SECRET=...
 
-2. Copy `.env.example` to `.env` and fill in the server values:
+# Investment news provider. Currents is preferred.
+NEWS_PROVIDER=currents
+CURRENTS_API_KEY=...
+NEWS_CATEGORY=investment
+NEWS_LANGUAGE=en
+NEWS_COUNTRY=US
+NEWS_MAX_PAGES=3
 
-   ```env
-   DATABASE_URL=postgresql://...
-   NEWS_PROVIDER=currents
-   CURRENTS_API_KEY=...
-   RSS_FEEDS=
-   NEWS_API_KEY=... # only when NEWS_PROVIDER=newsdata
-   NEWS_MAX_PAGES=3
-   TYPHOON_API_KEY=...
-   TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
-   CRON_SECRET=...
-   ```
+# Optional explicit RSS mode. Do not mix it silently with Currents.
+RSS_FEEDS=
+```
 
-   Use the Supabase pooler connection string for hosted/serverless environments. Never commit `.env`.
+`NEWS_API_KEY` remains supported only for the previous explicit `NEWS_PROVIDER=newsdata` mode. Never commit `.env`.
 
-3. Start the frontend and API together:
-
-   ```bash
-   npm run dev
-   ```
-
-   - Frontend: `http://localhost:5173`
-   - API: `http://localhost:3000`
-   - Vite proxies `/api` to the Express server.
-
-## Commands
+## Local development
 
 ```bash
-npm install       # install dependencies
-npm run dev       # Vite + Express development servers
-npm run build     # production frontend build in dist/
-npm test          # mocked/unit/API tests
-npm run ingest:news # manually collect up to NEWS_MAX_PAGES provider pages
-npm run retag:parties # backfill political-party suggestions for stored political articles
+npm install
+npm run dev
 ```
+
+- Frontend: `http://localhost:5173`
+- Express API: `http://localhost:3000`
+- Vite proxies `/api/*` to Express.
+
+Manual ingestion commands:
+
+```bash
+npm run ingest:markets
+npm run ingest:news
+npm test
+npm run build
+```
+
+The ingestion commands require the relevant server credentials and a configured database. They do not fabricate prices or news. Market ingestion processes the six configured assets sequentially to reduce provider quota pressure.
 
 ## Database
 
-- `database/schema.sql` is a version-controlled reference only.
-- `database/migrations/001_analytics_indexes.sql` is a review-before-apply, non-destructive migration. It is not executed by the application.
-- `database/manual-party-tagging.sql` is a placeholder-based manual tagging template. Replace its values only after verifying the article text and party relationship.
-- `database/review-party-association.sql` approves an existing `is_reviewed = false` suggestion by exact article URL and party code. It does not create new associations.
-- `database/review-asset-association.sql` is the equivalent manual workflow for approving or rejecting an asset suggestion.
-- Party candidates are loaded from `political_parties`; Typhoon receives only those candidates and the article text. The backend accepts only existing party codes, allowed relation types, and evidence traceable to the supplied text. It never creates party rows from AI output.
-- `npm run retag:parties` processes existing political articles sequentially. It writes only `is_reviewed = false` AI suggestions and preserves reviewed associations. The normal ingestion path only sends newly inserted articles to Typhoon, so page opens do not repeat tagging calls.
-- The public news request does not wait for Typhoon tagging; scheduled/manual ingestion performs the slower AI tagging workflow so the feed remains responsive.
-- No migration or startup script drops, overwrites, or automatically alters existing tables.
+Existing tables are preserved:
 
-Expected relationships:
+- `news_sources`
+- `articles`
+- `ai_summaries`
+- `political_parties`
+- `article_parties`
 
-- `news_sources 1:N articles`
-- `articles 1:N ai_summaries`
-- `articles M:N political_parties` through `article_parties`
+MARKETSCOPE adds or reuses:
 
-## API
+- `market_assets` — asset metadata and provider mapping
+- `market_prices` — daily OHLCV observations keyed by `(asset_id, price_date)`
+- `article_assets` — asset/article relationships keyed by `(article_id, asset_id)`
 
-### `GET /api/health`
+The live Supabase database was checked read-only during implementation. It already contains the six market asset metadata rows and zero market price rows/asset associations at that time. Existing market table columns are respected (`asset_class`, `currency_code`, `quote_unit`, `data_provider`, `open_price`, `close_price`, `retrieved_at`). No existing political data is deleted.
 
-Returns service status and boolean configuration flags. It never returns secret values.
+Run `database/review-asset-association.sql` after independently verifying a relationship. Public asset counts use `is_reviewed = true`; the news UI may show unreviewed suggestions with a visible pending label.
 
-### `GET /api/news?party=PARTY_CODE`
+## APIs
 
-Refreshes the provider feed when the 15-minute cache is stale, reads normalized articles from PostgreSQL, and returns only reviewed party relationships.
+### Service and news
 
-### `GET /api/parties`
+- `GET /api/health`
+- `GET /api/news?category=investment&asset=XAUUSD`
+- `GET /api/news/:id?category=investment`
+- `POST /api/summarize` with `{ "articleId": "uuid" }`
+- `GET /api/cron/ingest` for protected investment news ingestion
 
-Returns the political party catalog from PostgreSQL with `articleCount` based only on distinct reviewed political article associations.
+### Markets
 
-### `POST /api/summarize`
+- `GET /api/markets`
+- `GET /api/markets/:symbol/history?range=7d|30d|90d`
+- `GET /api/markets/:symbol/analytics?range=7d|30d|90d`
+- `GET /api/markets/cron/ingest` for protected price ingestion
 
-Request body:
+### Analytics
 
-```json
-{ "articleId": "uuid" }
-```
+- `GET /api/analytics/overview?range=7d|30d|90d`
+- `GET /api/analytics/news-volume?range=7d|30d`
+- `GET /api/analytics/asset-news?range=7d|30d`
+- `GET /api/analytics/investment-topics?range=7d|30d`
 
-The response is `text/event-stream` with `delta`, `complete`, or `error` events. Successful summaries are persisted only after the full stream completes. Cached summaries use the same SSE contract and are marked `cached: true`.
+The earlier political analytics routes remain mounted for existing records: `/timeline`, `/parties`, `/sources`, and `/topics`.
 
-### Analytics endpoints
+## Provider and data limitations
 
-- `GET /api/analytics/overview?range=7d|30d`
-- `GET /api/analytics/timeline?range=7d|30d`
-- `GET /api/analytics/parties?range=7d|30d`
-- `GET /api/analytics/sources?range=7d|30d`
-- `GET /api/analytics/topics?range=7d|30d`
+Alpha Vantage documents `GOLD_SILVER_HISTORY` for XAU, `WTI`, `FX_DAILY`, and `TIME_SERIES_DAILY` for equities and ETFs in its API documentation. The application handles provider `Information`, `Note`, invalid responses, missing observations, and empty history without inventing values. Actual access for the configured key must still be verified by running `npm run ingest:markets`; this repository does not claim live provider access from mocked tests.
 
-Analytics are calculated from collected PostgreSQL records. Timeline grouping uses `Asia/Bangkok`; party counts use only reviewed `article_parties` rows; topic results are keyword-frequency analysis from headlines, not verified event clustering.
+Currents v2 is used for investment news by requesting its documented `economy_business_finance` category with the configured language and country filters. The default demo configuration is English/US because the live Thai finance result set was empty during verification; switch both values explicitly to `th`/`TH` when Thai coverage is available. Returned category and language fields are validated before storage. If Thai coverage is insufficient, use the explicit RSS adapter with supported publisher feeds in `RSS_FEEDS`; it accepts only feed items with an explicit finance/market category and never scrapes publisher pages. The application does not silently mix international news or scrape protected full text.
 
-### `GET /api/cron/ingest`
+Free or entry-level providers may return excerpts rather than full article text, delayed observations, limited history, or quota errors. MARKETSCOPE preserves the available text, original URL, publication timestamp, and provider attribution. Analytics describe collected records only, not the complete market or news universe.
 
-The scheduled endpoint requires `Authorization: Bearer $CRON_SECRET`. It is configured in `vercel.json` for `0 2 * * *` (09:00 Bangkok time). The endpoint is not a public write API.
+## Vercel
 
-## Vercel deployment
+The existing Vercel project is preserved. `vercel.json` routes `/api/*` to the Express function, serves `dist`, and schedules protected news and market ingestion. Add these as server-side environment variables in the existing project:
 
-The repository is prepared for the existing Vercel project `poliscope-ywc-react`:
+- `DATABASE_URL` using the Supabase pooler connection string
+- `ALPHA_VANTAGE_API_KEY`
+- `NEWS_PROVIDER`, `CURRENTS_API_KEY`, and optional `RSS_FEEDS`
+- `TYPHOON_API_KEY`, `TYPHOON_MODEL`
+- `CRON_SECRET`
 
-- `dist/` is the Vite output directory.
-- `api/index.js` exposes the Express application as the server function.
-- `vercel.json` routes `/api/*` to Express and all other paths to the React entrypoint.
-- Add `DATABASE_URL`, `NEWS_PROVIDER=currents`, `CURRENTS_API_KEY`, `TYPHOON_API_KEY`, and `TYPHOON_MODEL` as server-side Vercel environment variables.
-- Set `RSS_FEEDS` only when deliberately using `NEWS_PROVIDER=rss`; set `NEWS_API_KEY` only when deliberately using the legacy `NEWS_PROVIDER=newsdata` adapter.
-- Add `CRON_SECRET` and optionally `NEWS_MAX_PAGES` as server-side Vercel environment variables.
-- Use the Supabase pooler URL and keep secrets out of Vite client variables.
-- Verify the project’s root directory is this repository and the framework/build settings match `npm run build` and `dist`.
-
-This repository does not deploy or push automatically. Before a release, run the local checks, then use the already-linked Vercel project and verify `/api/health`, `/api/news`, and a streamed summary in a preview deployment.
-
-Vercel Hobby cron is configured once per day. Currents Free request and result quotas limit how much history can be collected per run. The analytics dashboard reports only articles actually stored in PostgreSQL; a “30-day” view means collected articles published within the last 30 days, not all news published during that period. Trend comparison remains disabled until the database covers at least 14 calendar days.
-
-Reference: [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite), [Vercel Express deployment](https://vercel.com/docs/frameworks/backend/express), and [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build).
-
-## News provider notes
-
-Currents v2 is the preferred provider because its Search API documents the `politics_government` taxonomy, Thai language filtering, and cursor pagination. The application does not silently replace Thai results with international results when the provider returns too few articles. Verify actual Thai volume with `npm run ingest:news` after adding a Currents key. The free plan may return only a limited text preview, so POLISCOPE preserves the provider's available `description`/`content` and keeps the original source link.
-
-NewsData remains available only as an explicit legacy adapter (`NEWS_PROVIDER=newsdata`). The current application does not request NewsData `full_content=1`; a paid-plan error from that feature or from the account is not treated as a reason to mix providers. RSS is a separate explicit adapter (`NEWS_PROVIDER=rss`, `RSS_FEEDS=url1,url2`) and accepts only feed items with an explicit political category.
+Vercel Hobby cron schedules are limited and are not a substitute for a high-frequency market data system. Do not push or deploy without explicit approval.
 
 ## Verification status
 
-Mocked provider, hashing, streaming, query, refresh-policy, and HTTP validation tests are included. Live Currents, RSS, Supabase, Typhoon, and Vercel deployment verification require the corresponding credentials and explicit deployment approval.
+Mocked provider, normalization, analytics, asset matching, streaming, API validation, and build checks are included. The latest local verification passed `npm test` with 65 tests and `npm run build`. Alpha Vantage, Currents, Typhoon, and Vercel live verification remain credential/deployment dependent.

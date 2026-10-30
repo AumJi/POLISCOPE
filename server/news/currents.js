@@ -38,6 +38,17 @@ function normalizeDate(value) {
   return Number.isNaN(date.valueOf()) ? null : date.toISOString();
 }
 
+function normalizeHttpUrl(value) {
+  const text = asText(value);
+  if (!text || /\s/.test(text)) return null;
+  try {
+    const url = new URL(text);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeCategories(value) {
   const values = Array.isArray(value) ? value : [value];
   return [...new Set(values
@@ -92,14 +103,14 @@ export function normalizeCurrentsArticle(raw, { requiredCategory = CURRENTS_POLI
     description: asText(raw.description),
     content: asText(raw.content),
     originalUrl,
-    imageUrl: asText(raw.image) || asText(raw.image_url),
+    imageUrl: normalizeHttpUrl(raw.image) || normalizeHttpUrl(raw.image_url),
     category: normalizedCategories.join(","),
     categories: normalizedCategories,
     publishedAt: normalizeDate(raw.published || raw.pubDate),
     source: {
       sourceKey,
       name: sourceName,
-      websiteUrl: asText(raw.source_url) || sourceWebsite(originalUrl),
+      websiteUrl: normalizeHttpUrl(raw.source_url) || sourceWebsite(originalUrl),
     },
   };
 }

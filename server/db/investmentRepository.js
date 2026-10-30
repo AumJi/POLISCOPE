@@ -43,8 +43,8 @@ export function buildInvestmentNewsQuery({ assetSymbol, sourceKey, limit = 20, i
         COALESCE(json_agg(DISTINCT jsonb_build_object(
           'symbol', asset.symbol,
           'name', asset.name,
-          'assetType', asset.asset_type,
-          'category', asset.category,
+          'assetType', asset.asset_class,
+          'category', asset.asset_class,
           'relationType', aa.relation_type,
           'taggingMethod', aa.tagging_method,
           'isReviewed', aa.is_reviewed
@@ -114,8 +114,8 @@ export async function findInvestmentArticleById(articleId, { includeUnreviewed =
       a.image_url, a.category, a.published_at, a.fetched_at,
       json_build_object('id', source.id, 'sourceKey', source.source_key, 'name', source.name, 'websiteUrl', source.website_url) AS source,
       COALESCE(json_agg(DISTINCT jsonb_build_object(
-        'symbol', asset.symbol, 'name', asset.name, 'assetType', asset.asset_type,
-        'category', asset.category, 'relationType', aa.relation_type,
+        'symbol', asset.symbol, 'name', asset.name, 'assetType', asset.asset_class,
+        'category', asset.asset_class, 'relationType', aa.relation_type,
         'taggingMethod', aa.tagging_method, 'isReviewed', aa.is_reviewed
       )) FILTER (WHERE asset.id IS NOT NULL${visibilitySql}), '[]'::json) AS assets
     FROM articles a

@@ -15,7 +15,7 @@ export async function persistNewsArticles(articles) {
     `, ["TH"]);
     const parties = partiesResult.rows;
     const assetsResult = await client.query(`
-      SELECT id, symbol, name, asset_type, category
+      SELECT id, symbol, name, asset_class, currency_code, quote_unit
       FROM market_assets
       ORDER BY symbol ASC
     `);

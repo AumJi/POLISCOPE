@@ -1,8 +1,8 @@
 export const MARKET_ASSETS = Object.freeze([
   {
-    symbol: "XAU",
+    symbol: "XAUUSD",
     name: "Gold / XAUUSD",
-    assetType: "commodity",
+    assetType: "gold",
     category: "gold",
     providerSymbol: "XAU",
     providerFunction: "GOLD_SILVER_HISTORY",
@@ -68,5 +68,6 @@ export const MARKET_ASSETS = Object.freeze([
 ]);
 
 export function findMarketAsset(symbol) {
-  return MARKET_ASSETS.find((asset) => asset.symbol.toLowerCase() === String(symbol || "").trim().toLowerCase());
+  const normalized = String(symbol || "").trim().toLowerCase();
+  return MARKET_ASSETS.find((asset) => asset.symbol.toLowerCase() === normalized || (normalized === "xau" && asset.symbol === "XAUUSD"));
 }
