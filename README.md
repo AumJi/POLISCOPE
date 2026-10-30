@@ -54,12 +54,15 @@ NEWS_CATEGORY=investment
 NEWS_LANGUAGE=en
 NEWS_COUNTRY=US
 NEWS_MAX_PAGES=3
+VITE_ENABLE_MARKET_DEMO_DATA=false
 
 # Optional explicit RSS mode. Do not mix it silently with Currents.
 RSS_FEEDS=
 ```
 
 `NEWS_API_KEY` remains supported only for the previous explicit `NEWS_PROVIDER=newsdata` mode. Never commit `.env`.
+
+For a local interview/demo environment only, set `VITE_ENABLE_MARKET_DEMO_DATA=true` to show clearly labeled deterministic mock price observations when PostgreSQL has no history for an asset. This never writes mock rows to `market_prices` and must remain `false` in production.
 
 ## Local development
 
