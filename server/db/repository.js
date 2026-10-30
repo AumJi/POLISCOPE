@@ -5,7 +5,7 @@ export const POLITICAL_ARTICLE_SQL = `(
   OR (',' || LOWER(a.category) || ',') LIKE '%,politics,%'
 )`;
 
-export function buildNewsQuery({ partyCode, limit = 10 } = {}) {
+export function buildNewsQuery({ partyCode, sourceKey, limit = 10 } = {}) {
   const values = [];
   const filters = [POLITICAL_ARTICLE_SQL];
 
@@ -18,6 +18,16 @@ export function buildNewsQuery({ partyCode, limit = 10 } = {}) {
       WHERE filter_ap.article_id = a.id
         AND filter_ap.is_reviewed = true
         AND filter_party.party_code = $${values.length}
+    )`);
+  }
+
+  if (sourceKey) {
+    values.push(sourceKey);
+    filters.push(`EXISTS (
+      SELECT 1
+      FROM news_sources filter_source
+      WHERE filter_source.id = a.source_id
+        AND filter_source.source_key = $${values.length}
     )`);
   }
 
@@ -93,7 +103,7 @@ export async function listNews(options = {}) {
   return result.rows.map(mapArticleRow);
 }
 
-export function buildNewsCountQuery({ partyCode } = {}) {
+export function buildNewsCountQuery({ partyCode, sourceKey } = {}) {
   const values = [];
   const filters = [POLITICAL_ARTICLE_SQL];
 
@@ -106,6 +116,16 @@ export function buildNewsCountQuery({ partyCode } = {}) {
       WHERE filter_ap.article_id = a.id
         AND filter_ap.is_reviewed = true
         AND filter_party.party_code = $${values.length}
+    )`);
+  }
+
+  if (sourceKey) {
+    values.push(sourceKey);
+    filters.push(`EXISTS (
+      SELECT 1
+      FROM news_sources filter_source
+      WHERE filter_source.id = a.source_id
+        AND filter_source.source_key = $${values.length}
     )`);
   }
 

@@ -53,4 +53,11 @@ describe("HTTP API validation", () => {
     expect(response.status).toBe(401);
     expect(response.body.error).toBe("Unauthorized");
   });
+
+  it("returns an explicit service error when analytics needs an unconfigured database", async () => {
+    const response = await request(app).get("/api/analytics/overview?range=30d");
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).toBe("Database is not configured");
+  });
 });

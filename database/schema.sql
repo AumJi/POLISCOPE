@@ -58,5 +58,8 @@ CREATE TABLE IF NOT EXISTS article_parties (
 
 CREATE INDEX IF NOT EXISTS articles_published_at_idx ON articles (published_at DESC);
 CREATE INDEX IF NOT EXISTS articles_source_id_idx ON articles (source_id);
+CREATE INDEX IF NOT EXISTS articles_category_published_at_idx ON articles (category, published_at);
+CREATE INDEX IF NOT EXISTS articles_source_published_at_idx ON articles (source_id, published_at);
 CREATE INDEX IF NOT EXISTS article_parties_party_id_idx ON article_parties (party_id);
+CREATE INDEX IF NOT EXISTS article_parties_party_reviewed_idx ON article_parties (party_id, is_reviewed);
 CREATE INDEX IF NOT EXISTS ai_summaries_article_hash_idx ON ai_summaries (article_id, input_hash);
