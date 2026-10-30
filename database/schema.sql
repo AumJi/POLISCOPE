@@ -63,3 +63,45 @@ CREATE INDEX IF NOT EXISTS articles_source_published_at_idx ON articles (source_
 CREATE INDEX IF NOT EXISTS article_parties_party_id_idx ON article_parties (party_id);
 CREATE INDEX IF NOT EXISTS article_parties_party_reviewed_idx ON article_parties (party_id, is_reviewed);
 CREATE INDEX IF NOT EXISTS ai_summaries_article_hash_idx ON ai_summaries (article_id, input_hash);
+
+-- MARKETSCOPE extension. Apply database/migrations/002_marketscope_market_data.sql
+-- manually; the application never executes schema.sql automatically.
+CREATE TABLE IF NOT EXISTS market_assets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  symbol VARCHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
+  asset_type VARCHAR(32) NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  provider_symbol VARCHAR(32),
+  provider_function VARCHAR(64),
+  quote_currency VARCHAR(16) NOT NULL,
+  unit VARCHAR(64) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS market_prices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  asset_id UUID NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
+  price_date DATE NOT NULL,
+  open NUMERIC(20, 8),
+  high NUMERIC(20, 8),
+  low NUMERIC(20, 8),
+  close NUMERIC(20, 8) NOT NULL,
+  adjusted_close NUMERIC(20, 8),
+  volume NUMERIC(24, 4),
+  quote_currency VARCHAR(16) NOT NULL,
+  unit VARCHAR(64) NOT NULL,
+  source VARCHAR(64) NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (asset_id, price_date)
+);
+
+CREATE TABLE IF NOT EXISTS article_assets (
+  article_id UUID NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  asset_id UUID NOT NULL REFERENCES market_assets(id) ON DELETE CASCADE,
+  relation_type VARCHAR(120) NOT NULL DEFAULT 'mentioned',
+  tagging_method VARCHAR(120) NOT NULL DEFAULT 'name_match',
+  is_reviewed BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (article_id, asset_id)
+);
