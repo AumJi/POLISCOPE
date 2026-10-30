@@ -124,6 +124,7 @@ function Header({ search, setSearch }) {
 }
 
 function MetricCard({ label, value, detail, icon: Icon }) {
+  if (Icon === Sparkles) return null;
   return <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><span className="text-sm font-semibold text-slate-500">{label}</span><span className="rounded-xl bg-blue-50 p-2 text-poliscope"><Icon size={18} /></span></div><p className="mt-4 text-3xl font-bold tracking-tight text-navy">{value}</p>{detail && <p className="mt-1 text-xs text-slate-400">{detail}</p>}</div>;
 }
 
