@@ -1,4 +1,5 @@
 import express from "express";
+import { isDatabaseConfigured } from "./db/pool.js";
 
 const app = express();
 
@@ -9,7 +10,7 @@ app.get("/api/health", (_request, response) => {
     status: "ok",
     service: "poliscope-api",
     environment: {
-      database: Boolean(process.env.DATABASE_URL),
+      database: isDatabaseConfigured,
       newsApi: Boolean(process.env.NEWS_API_KEY),
       typhoonApi: Boolean(process.env.TYPHOON_API_KEY),
     },
