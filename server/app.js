@@ -1,7 +1,6 @@
 import express from "express";
 import { isDatabaseConfigured } from "./db/pool.js";
-import { listNews, listParties } from "./db/repository.js";
-import { findArticleById } from "./db/repository.js";
+import { countNews, findArticleById, listNews, listParties } from "./db/repository.js";
 import {
   buildSummaryInput,
   createTyphoonClient,
@@ -50,18 +49,40 @@ app.get("/api/news", async (request, response, next) => {
   }
 
   try {
-    const articles = await listNews({ partyCode, limit: 10 });
+    const [articles, total] = await Promise.all([
+      listNews({ partyCode, limit: 10 }),
+      countNews({ partyCode }),
+    ]);
     if (refreshError && articles.length === 0) throw refreshError;
 
     response.json({
       articles,
       meta: {
         count: articles.length,
+        total,
         refreshed: refresh.refreshed,
         cached: refresh.cached ?? false,
         stale: Boolean(refreshError),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/news/:id", async (request, response, next) => {
+  if (!isUuid(request.params.id)) {
+    return response.status(400).json({ error: "Article id must be a valid UUID" });
+  }
+
+  if (!isDatabaseConfigured) {
+    return response.status(503).json({ error: "Database is not configured" });
+  }
+
+  try {
+    const article = await findArticleById(request.params.id);
+    if (!article) return response.status(404).json({ error: "Article not found" });
+    response.json({ article });
   } catch (error) {
     next(error);
   }

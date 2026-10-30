@@ -28,4 +28,18 @@ describe("HTTP API validation", () => {
     expect(response.status).toBe(503);
     expect(response.body.error).toBe("Database is not configured");
   });
+
+  it("validates article detail identifiers", async () => {
+    const response = await request(app).get("/api/news/not-a-uuid");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain("valid UUID");
+  });
+
+  it("keeps article detail server-only when the database is unavailable", async () => {
+    const response = await request(app).get("/api/news/550e8400-e29b-41d4-a716-446655440000");
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).toBe("Database is not configured");
+  });
 });

@@ -1,4 +1,5 @@
 const NEWS_DATA_ENDPOINT = "https://newsdata.io/api/1/latest";
+export const POLITICAL_CATEGORY = "politics";
 
 export class NewsDataError extends Error {
   constructor(message, { status = 502, code = "NEWS_PROVIDER_ERROR" } = {}) {
@@ -44,15 +45,29 @@ function normalizeSourceKey(raw, link) {
   }
 }
 
+export function normalizeCategories(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return [...new Set(values
+    .filter((category) => typeof category === "string")
+    .flatMap((category) => category.split(","))
+    .map((category) => category.trim().toLowerCase())
+    .filter(Boolean))];
+}
+
+export function hasPoliticalCategory(value) {
+  return normalizeCategories(value).includes(POLITICAL_CATEGORY);
+}
+
 export function normalizeNewsArticle(raw) {
   if (!raw || typeof raw !== "object") return null;
 
   const originalUrl = asText(raw.link);
   const title = asText(raw.title);
-  if (!originalUrl || !title) return null;
+  const categories = normalizeCategories(raw.category);
+  if (!originalUrl || !title || !categories.includes(POLITICAL_CATEGORY)) return null;
 
-  const description = asText(raw.description) || asText(raw.content);
-  const content = asText(raw.content) || description;
+  const description = asText(raw.description);
+  const content = asText(raw.content);
   const sourceKey = normalizeSourceKey(raw, originalUrl);
 
   let websiteUrl = asText(raw.source_url);
@@ -71,7 +86,8 @@ export function normalizeNewsArticle(raw) {
     content,
     originalUrl,
     imageUrl: asText(raw.image_url),
-    category: Array.isArray(raw.category) ? asText(raw.category[0]) : asText(raw.category),
+    category: categories.join(","),
+    categories,
     publishedAt: normalizeDate(raw.pubDate),
     source: {
       sourceKey,

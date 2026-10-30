@@ -1,8 +1,13 @@
 import { query } from "./query.js";
 
+export const POLITICAL_ARTICLE_SQL = `(
+  LOWER(a.category) = 'politics'
+  OR (',' || LOWER(a.category) || ',') LIKE '%,politics,%'
+)`;
+
 export function buildNewsQuery({ partyCode, limit = 10 } = {}) {
   const values = [];
-  const filters = [];
+  const filters = [POLITICAL_ARTICLE_SQL];
 
   if (partyCode) {
     values.push(partyCode);
@@ -83,8 +88,41 @@ export function mapArticleRow(row) {
 }
 
 export async function listNews(options = {}) {
-  const result = await query(...Object.values(buildNewsQuery(options)));
+  const { text, values } = buildNewsQuery(options);
+  const result = await query(text, values);
   return result.rows.map(mapArticleRow);
+}
+
+export function buildNewsCountQuery({ partyCode } = {}) {
+  const values = [];
+  const filters = [POLITICAL_ARTICLE_SQL];
+
+  if (partyCode) {
+    values.push(partyCode);
+    filters.push(`EXISTS (
+      SELECT 1
+      FROM article_parties filter_ap
+      INNER JOIN political_parties filter_party ON filter_party.id = filter_ap.party_id
+      WHERE filter_ap.article_id = a.id
+        AND filter_ap.is_reviewed = true
+        AND filter_party.party_code = $${values.length}
+    )`);
+  }
+
+  return {
+    text: `
+      SELECT COUNT(*)::int AS total
+      FROM articles a
+      WHERE ${filters.join(" AND ")}
+    `,
+    values,
+  };
+}
+
+export async function countNews(options = {}) {
+  const { text, values } = buildNewsCountQuery(options);
+  const result = await query(text, values);
+  return result.rows[0]?.total || 0;
 }
 
 export async function listParties() {
@@ -122,12 +160,30 @@ export async function findArticleById(articleId) {
       a.category,
       a.published_at,
       a.fetched_at,
-      json_build_object('id', source.id, 'sourceKey', source.source_key, 'name', source.name, 'websiteUrl', source.website_url) AS source
+      json_build_object('id', source.id, 'sourceKey', source.source_key, 'name', source.name, 'websiteUrl', source.website_url) AS source,
+      COALESCE(
+        json_agg(
+          DISTINCT jsonb_build_object(
+            'code', party.party_code,
+            'name', party.name,
+            'shortName', party.short_name,
+            'countryCode', party.country_code,
+            'officialWebsiteUrl', party.official_website_url,
+            'logoUrl', party.logo_url,
+            'relationType', ap.relation_type,
+            'taggingMethod', ap.tagging_method
+          )
+        ) FILTER (WHERE party.id IS NOT NULL AND ap.is_reviewed = true),
+        '[]'::json
+      ) AS parties
     FROM articles a
     INNER JOIN news_sources source ON source.id = a.source_id
-    WHERE a.id = $1
+    LEFT JOIN article_parties ap ON ap.article_id = a.id AND ap.is_reviewed = true
+    LEFT JOIN political_parties party ON party.id = ap.party_id
+    WHERE a.id = $1 AND ${POLITICAL_ARTICLE_SQL}
+    GROUP BY a.id, source.id
     LIMIT 1
   `, [articleId]);
 
-  return result.rows[0] ? mapArticleRow({ ...result.rows[0], parties: [] }) : null;
+  return result.rows[0] ? mapArticleRow(result.rows[0]) : null;
 }
