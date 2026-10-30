@@ -11,8 +11,10 @@ It fetches Thai politics articles from NewsData.io, stores normalized records in
 - URL/provider-ID deduplication and a 15-minute in-memory refresh cache
 - Protected Vercel Cron ingestion plus `npm run ingest:news` for manual collection
 - PostgreSQL persistence for sources, articles, summaries, parties, and reviewed article-party relationships
+- Deterministic party association suggestions during ingestion using seeded party names, short names, and explicitly verified aliases
 - Party filtering with `GET /api/news?party=PARTY_CODE`
-- Manual party-tagging SQL template with reviewed-only public output
+- Reviewed-only party counts and article relationships in public responses
+- Manual review SQL workflow for approving pending article-party suggestions
 - Typhoon streaming summaries over POST + Server-Sent Events
 - SHA-256 summary input hashing and database cache reuse
 - Responsive React/Vite dashboard with search, filters, skeletons, empty/error states, article details, source links, and AI disclaimer
@@ -83,6 +85,8 @@ npm run ingest:news # manually collect up to NEWS_MAX_PAGES provider pages
 - `database/schema.sql` is a version-controlled reference only.
 - `database/migrations/001_analytics_indexes.sql` is a review-before-apply, non-destructive migration. It is not executed by the application.
 - `database/manual-party-tagging.sql` is a placeholder-based manual tagging template. Replace its values only after verifying the article text and party relationship.
+- `database/review-party-association.sql` approves an existing `is_reviewed = false` suggestion by exact article URL and party code. It does not create new associations.
+- Party matching runs inside the news persistence transaction. It checks only article title and description, never politician names, AI output, or scraped article content. Add aliases to `server/parties/matcher.js` only after verifying them against an authoritative party source.
 - No migration or startup script drops, overwrites, or automatically alters existing tables.
 
 Expected relationships:
@@ -103,7 +107,7 @@ Refreshes the provider feed when the 15-minute cache is stale, reads normalized 
 
 ### `GET /api/parties`
 
-Returns the political party catalog from PostgreSQL.
+Returns the political party catalog from PostgreSQL with `articleCount` based only on distinct reviewed political article associations.
 
 ### `POST /api/summarize`
 

@@ -1,8 +1,18 @@
 import { withTransaction } from "../db/query.js";
+import { buildPartyAssociationQuery, findPartyMatches } from "../parties/matcher.js";
 
 export async function persistNewsArticles(articles) {
   return withTransaction(async (client) => {
     let saved = 0;
+    let suggestedAssociations = 0;
+
+    const partiesResult = await client.query(`
+      SELECT id, party_code, name, short_name
+      FROM political_parties
+      WHERE UPPER(country_code) = $1
+      ORDER BY name ASC
+    `, ["TH"]);
+    const parties = partiesResult.rows;
 
     for (const article of articles) {
       const sourceResult = await client.query(`
@@ -23,7 +33,9 @@ export async function persistNewsArticles(articles) {
         LIMIT 1
       `, [article.originalUrl, article.externalId, sourceId]);
 
+      let articleId;
       if (existingResult.rows[0]) {
+        articleId = existingResult.rows[0].id;
         await client.query(`
           UPDATE articles
           SET external_id = $1,
@@ -45,15 +57,16 @@ export async function persistNewsArticles(articles) {
           article.imageUrl,
           article.category,
           article.publishedAt,
-          existingResult.rows[0].id,
+          articleId,
         ]);
       } else {
-        await client.query(`
+        const insertedResult = await client.query(`
           INSERT INTO articles (
             source_id, external_id, title, description, content, original_url,
             image_url, category, published_at, fetched_at
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+          RETURNING id
         `, [
           sourceId,
           article.externalId,
@@ -65,11 +78,24 @@ export async function persistNewsArticles(articles) {
           article.category,
           article.publishedAt,
         ]);
+        articleId = insertedResult.rows[0]?.id;
+      }
+
+      const matches = findPartyMatches(article, parties);
+      for (const match of matches) {
+        const associationQuery = buildPartyAssociationQuery({
+          articleId,
+          partyId: match.partyId,
+          relationType: match.relationType,
+          taggingMethod: match.taggingMethod,
+        });
+        const associationResult = await client.query(associationQuery.text, associationQuery.values);
+        suggestedAssociations += associationResult.rowCount;
       }
 
       saved += 1;
     }
 
-    return saved;
+    return { saved, suggestedAssociations };
   });
 }

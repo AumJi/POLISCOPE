@@ -37,10 +37,12 @@ export async function refreshNews({
   ingestionInProgress = true;
   try {
     const fetched = fetcher === fetchNewsDataPages ? await fetcher({ maxPages }) : await fetcher();
-    const savedCount = isDatabaseConfigured ? await persister(fetched.articles) : 0;
+    const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
+    const savedCount = typeof persisted === "number" ? persisted : persisted?.saved || 0;
     const value = {
       refreshed: true,
       savedCount,
+      suggestedAssociations: typeof persisted === "number" ? 0 : persisted?.suggestedAssociations || 0,
       articleCount: fetched.articles.length,
       pagesFetched: fetched.pagesFetched || 1,
       totalResults: fetched.totalResults,

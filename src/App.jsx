@@ -151,7 +151,7 @@ function Header({ search, setSearch, onRefresh, mobileOpen, setMobileOpen }) {
 function PartyChip({ party, active, onClick }) {
   return (
     <button onClick={onClick} className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition ${active ? "border-navy bg-navy text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-poliscope"}`}>
-      {party.name || party.shortName || party.code}
+      {party.name || party.shortName || party.code}{Number.isFinite(Number(party.articleCount)) && <span className="ml-2 text-xs opacity-70">({Number(party.articleCount).toLocaleString("th-TH")})</span>}
     </button>
   );
 }

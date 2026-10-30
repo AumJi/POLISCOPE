@@ -145,12 +145,31 @@ export async function countNews(options = {}) {
   return result.rows[0]?.total || 0;
 }
 
+export function buildPartiesQuery() {
+  return {
+    text: `
+      SELECT
+        p.id,
+        p.party_code,
+        p.name,
+        p.short_name,
+        p.country_code,
+        p.official_website_url,
+        p.logo_url,
+        COUNT(DISTINCT a.id)::int AS article_count
+      FROM political_parties p
+      LEFT JOIN article_parties ap ON ap.party_id = p.id AND ap.is_reviewed = true
+      LEFT JOIN articles a ON a.id = ap.article_id AND ${POLITICAL_ARTICLE_SQL}
+      GROUP BY p.id
+      ORDER BY p.name ASC
+    `,
+    values: [],
+  };
+}
+
 export async function listParties() {
-  const result = await query(`
-    SELECT id, party_code, name, short_name, country_code, official_website_url, logo_url
-    FROM political_parties
-    ORDER BY name ASC
-  `);
+  const { text, values } = buildPartiesQuery();
+  const result = await query(text, values);
 
   return result.rows.map(mapPartyRow);
 }
@@ -164,6 +183,7 @@ export function mapPartyRow(row) {
     countryCode: row.country_code,
     officialWebsiteUrl: row.official_website_url,
     logoUrl: row.logo_url,
+    articleCount: row.article_count || 0,
   };
 }
 

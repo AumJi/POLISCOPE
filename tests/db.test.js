@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNewsCountQuery, buildNewsQuery, mapArticleRow, mapPartyRow } from "../server/db/repository.js";
+import { buildNewsCountQuery, buildNewsQuery, buildPartiesQuery, mapArticleRow, mapPartyRow } from "../server/db/repository.js";
 
 describe("database repository", () => {
   it("builds a parameterized news query with a party filter", () => {
@@ -70,6 +70,7 @@ describe("database repository", () => {
       country_code: "TH",
       official_website_url: "https://example.com",
       logo_url: null,
+      article_count: 4,
     })).toEqual({
       id: "party-id",
       code: "DEMO",
@@ -78,6 +79,16 @@ describe("database repository", () => {
       countryCode: "TH",
       officialWebsiteUrl: "https://example.com",
       logoUrl: null,
+      articleCount: 4,
     });
+  });
+
+  it("counts only reviewed political articles for public party counts", () => {
+    const result = buildPartiesQuery();
+
+    expect(result.values).toEqual([]);
+    expect(result.text).toContain("ap.is_reviewed = true");
+    expect(result.text).toContain("COUNT(DISTINCT a.id)::int AS article_count");
+    expect(result.text).toContain("LOWER(a.category)");
   });
 });
