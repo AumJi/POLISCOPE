@@ -60,4 +60,11 @@ describe("HTTP API validation", () => {
     expect(response.status).toBe(503);
     expect(response.body.error).toBe("Database is not configured");
   });
+
+  it("returns an explicit service error when topic analytics needs an unconfigured database", async () => {
+    const response = await request(app).get("/api/analytics/topics?range=7d");
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).toBe("Database is not configured");
+  });
 });

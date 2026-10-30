@@ -68,7 +68,7 @@ router.get("/sources", asyncRoute(async (request, response) => {
 }));
 
 router.get("/topics", asyncRoute(async (request, response) => {
-  if (!requireDatabase(request)) return;
+  if (!requireDatabase(request, response)) return;
   const { key, days } = parseAnalyticsRange(request.query.range, "7d");
   const filters = getFilters(request);
   const [topicData, coverage] = await Promise.all([
