@@ -58,7 +58,7 @@ app.get("/api/news", async (request, response, next) => {
   let refreshError = null;
 
   try {
-    refresh = await refreshNews({ maxPages: 1 });
+    refresh = await refreshNews({ maxPages: 1, tagParties: false });
   } catch (error) {
     refreshError = error;
   }

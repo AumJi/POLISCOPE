@@ -21,6 +21,8 @@ export async function refreshNews({
   now = () => Date.now(),
   fetcher = fetchNewsDataPages,
   persister = persistNewsArticles,
+  partyTagger = tagArticlesWithTyphoon,
+  tagParties = true,
   maxPages,
 } = {}) {
   if (!force && memoryCache && now() - memoryCache.cachedAt < NEWS_CACHE_TTL_MS) {
@@ -39,8 +41,8 @@ export async function refreshNews({
   try {
     const fetched = fetcher === fetchNewsDataPages ? await fetcher({ maxPages }) : await fetcher();
     const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
-    const tagging = isDatabaseConfigured && persisted?.articles?.length
-      ? await tagArticlesWithTyphoon(persisted.articles)
+    const tagging = tagParties && isDatabaseConfigured && persisted?.articles?.length
+      ? await partyTagger(persisted.articles)
       : null;
     const savedCount = typeof persisted === "number" ? persisted : persisted?.saved || 0;
     const value = {
