@@ -14,7 +14,7 @@ export function parseAnalyticsRange(value, fallback = "30d") {
   return { key: selected, days: ANALYTICS_RANGES[selected] };
 }
 
-export function appendScopeFilters(filters, values, { partyCode, sourceKey } = {}) {
+export function appendScopeFilters(filters, values, { partyCode, sourceKey, includeUnreviewed = false } = {}) {
   if (partyCode) {
     values.push(partyCode);
     filters.push(`EXISTS (
@@ -22,7 +22,7 @@ export function appendScopeFilters(filters, values, { partyCode, sourceKey } = {
       FROM article_parties scoped_ap
       INNER JOIN political_parties scoped_party ON scoped_party.id = scoped_ap.party_id
       WHERE scoped_ap.article_id = a.id
-        AND scoped_ap.is_reviewed = true
+        ${includeUnreviewed ? "" : "AND scoped_ap.is_reviewed = true"}
         AND scoped_party.party_code = $${values.length}
     )`);
   }
@@ -45,11 +45,11 @@ function bangkokDateRangeSql() {
   `;
 }
 
-export async function getAnalyticsOverview({ range = "30d", partyCode, sourceKey } = {}) {
+export async function getAnalyticsOverview({ range = "30d", partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const { key, days } = parseAnalyticsRange(range);
   const values = [days];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
 
   const result = await query(`
@@ -63,7 +63,7 @@ export async function getAnalyticsOverview({ range = "30d", partyCode, sourceKey
       (SELECT COUNT(DISTINCT a.source_id)::int FROM articles a WHERE ${POLITICAL_ARTICLE_SQL} ${scopeSql}) AS total_sources,
       (SELECT COUNT(DISTINCT ap.party_id)::int
        FROM articles a
-       INNER JOIN article_parties ap ON ap.article_id = a.id AND ap.is_reviewed = true
+       INNER JOIN article_parties ap ON ap.article_id = a.id${includeUnreviewed ? "" : " AND ap.is_reviewed = true"}
        WHERE ${POLITICAL_ARTICLE_SQL} ${scopeSql}) AS total_parties,
       (SELECT COUNT(DISTINCT summaries.article_id)::int
        FROM ai_summaries summaries
@@ -92,11 +92,11 @@ export async function getAnalyticsOverview({ range = "30d", partyCode, sourceKey
   };
 }
 
-export async function getAnalyticsTimeline({ range = "30d", partyCode, sourceKey } = {}) {
+export async function getAnalyticsTimeline({ range = "30d", partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const { key, days } = parseAnalyticsRange(range);
   const values = [days];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
   const result = await query(`
     WITH bounds AS (
@@ -125,11 +125,11 @@ export async function getAnalyticsTimeline({ range = "30d", partyCode, sourceKey
   };
 }
 
-export async function getAnalyticsParties({ range = "30d", partyCode, sourceKey } = {}) {
+export async function getAnalyticsParties({ range = "30d", partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const { key, days } = parseAnalyticsRange(range);
   const values = [days];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
   const result = await query(`
     WITH bounds AS (
@@ -145,7 +145,7 @@ export async function getAnalyticsParties({ range = "30d", partyCode, sourceKey 
       COUNT(DISTINCT a.id)::int AS article_count
     FROM bounds
     CROSS JOIN political_parties p
-    LEFT JOIN article_parties ap ON ap.party_id = p.id AND ap.is_reviewed = true
+    LEFT JOIN article_parties ap ON ap.party_id = p.id${includeUnreviewed ? "" : " AND ap.is_reviewed = true"}
     LEFT JOIN articles a ON a.id = ap.article_id
       AND ${POLITICAL_ARTICLE_SQL}
       AND ${bangkokDateRangeSql()}
@@ -165,11 +165,11 @@ export async function getAnalyticsParties({ range = "30d", partyCode, sourceKey 
   };
 }
 
-export async function getAnalyticsSources({ range = "30d", partyCode, sourceKey } = {}) {
+export async function getAnalyticsSources({ range = "30d", partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const { key, days } = parseAnalyticsRange(range);
   const values = [days];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
   const result = await query(`
     WITH bounds AS (
@@ -202,10 +202,10 @@ export async function getAnalyticsSources({ range = "30d", partyCode, sourceKey 
   };
 }
 
-export async function getTopicSourceArticles({ days = 14, partyCode, sourceKey } = {}) {
+export async function getTopicSourceArticles({ days = 14, partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const values = [days];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
   const result = await query(`
     WITH bounds AS (
@@ -243,10 +243,10 @@ export async function getTopicSourceArticles({ days = 14, partyCode, sourceKey }
   };
 }
 
-export async function getPoliticalCoverage({ partyCode, sourceKey } = {}) {
+export async function getPoliticalCoverage({ partyCode, sourceKey, includeUnreviewed = false } = {}) {
   const values = [];
   const scopeFilters = [];
-  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey });
+  appendScopeFilters(scopeFilters, values, { partyCode, sourceKey, includeUnreviewed });
   const scopeSql = scopeFilters.length ? `AND ${scopeFilters.join(" AND ")}` : "";
   const result = await query(`
     SELECT

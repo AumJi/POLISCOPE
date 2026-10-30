@@ -28,7 +28,7 @@ function getFilters(request) {
     error.status = 400;
     throw error;
   }
-  return { partyCode, sourceKey };
+  return { partyCode, sourceKey, includeUnreviewed: request.query.includeUnreviewed === "true" };
 }
 
 function asyncRoute(handler) {
@@ -94,6 +94,7 @@ router.get("/topics", asyncRoute(async (request, response) => {
     trends: analysis.trends,
     trendAvailable: analysis.trendAvailable,
     trendReason: analysis.trendReason,
+    includeUnreviewed: filters.includeUnreviewed,
   });
 }));
 
