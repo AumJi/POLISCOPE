@@ -395,7 +395,7 @@ function NewsFeed() {
     try {
       const params = new URLSearchParams({ includeUnreviewed: "true" });
       if (party) params.set("party", party);
-      const response = await fetch(`/api/news${params}`);
+      const response = await fetch(`/api/news?${params}`);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "ไม่สามารถโหลดข่าวได้");
       setArticles(Array.isArray(payload.articles) ? payload.articles : []);
