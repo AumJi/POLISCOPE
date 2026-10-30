@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAlphaVantageUrl, fetchAlphaVantageAsset, normalizeAlphaVantageObservations } from "../server/markets/alphaVantage.js";
 import { calculateMarketAnalytics, calculateMovingAverage, calculateVolatility } from "../server/markets/analytics.js";
-import { findMarketAsset } from "../server/markets/assets.js";
+import { findMarketAsset, MARKET_ASSETS } from "../server/markets/assets.js";
 
 const apple = findMarketAsset("AAPL");
 
 describe("Alpha Vantage market provider", () => {
+  it("uses asset classes accepted by market_assets", () => {
+    expect(MARKET_ASSETS.map((asset) => asset.assetType)).toEqual([
+      "gold", "oil", "forex", "stock", "stock", "etf",
+    ]);
+  });
+
   it("builds a daily request for a configured asset", () => {
     const url = buildAlphaVantageUrl(apple, "secret-key");
     expect(url.origin + url.pathname).toBe("https://www.alphavantage.co/query");

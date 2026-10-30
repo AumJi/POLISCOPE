@@ -13,7 +13,8 @@ export const MARKET_ASSETS = Object.freeze([
   {
     symbol: "WTI",
     name: "West Texas Intermediate",
-    assetType: "commodity",
+    // Keep this value aligned with the deployed Supabase CHECK constraint.
+    assetType: "oil",
     category: "oil",
     providerSymbol: "WTI",
     providerFunction: "WTI",
