@@ -7,13 +7,16 @@ It fetches Thai politics articles from NewsData.io, stores normalized records in
 ## Features
 
 - Thai political news ingestion from NewsData.io (`country=th`, `language=th`, `category=politics`, `size=10`)
+- Cursor-based ingestion of up to `NEWS_MAX_PAGES` pages per manual/cron run, with the homepage limited to one refresh page
 - URL/provider-ID deduplication and a 15-minute in-memory refresh cache
+- Protected Vercel Cron ingestion plus `npm run ingest:news` for manual collection
 - PostgreSQL persistence for sources, articles, summaries, parties, and reviewed article-party relationships
 - Party filtering with `GET /api/news?party=PARTY_CODE`
 - Manual party-tagging SQL template with reviewed-only public output
 - Typhoon streaming summaries over POST + Server-Sent Events
 - SHA-256 summary input hashing and database cache reuse
 - Responsive React/Vite dashboard with search, filters, skeletons, empty/error states, article details, source links, and AI disclaimer
+- `/analytics` dashboard with PostgreSQL-backed KPIs, Bangkok-time timeline, party/source counts, keyword topics, trend comparison, filters, and article drill-down
 
 ## Architecture
 
@@ -47,8 +50,10 @@ The browser never receives `DATABASE_URL`, `NEWS_API_KEY`, or `TYPHOON_API_KEY`.
    ```env
    DATABASE_URL=postgresql://...
    NEWS_API_KEY=...
+   NEWS_MAX_PAGES=3
    TYPHOON_API_KEY=...
    TYPHOON_MODEL=typhoon-v2.5-30b-a3b-instruct
+   CRON_SECRET=...
    ```
 
    Use the Supabase pooler connection string for hosted/serverless environments. Never commit `.env`.
@@ -70,11 +75,13 @@ npm install       # install dependencies
 npm run dev       # Vite + Express development servers
 npm run build     # production frontend build in dist/
 npm test          # mocked/unit/API tests
+npm run ingest:news # manually collect up to NEWS_MAX_PAGES provider pages
 ```
 
 ## Database
 
 - `database/schema.sql` is a version-controlled reference only.
+- `database/migrations/001_analytics_indexes.sql` is a review-before-apply, non-destructive migration. It is not executed by the application.
 - `database/manual-party-tagging.sql` is a placeholder-based manual tagging template. Replace its values only after verifying the article text and party relationship.
 - No migration or startup script drops, overwrites, or automatically alters existing tables.
 
@@ -108,6 +115,20 @@ Request body:
 
 The response is `text/event-stream` with `delta`, `complete`, or `error` events. Successful summaries are persisted only after the full stream completes. Cached summaries use the same SSE contract and are marked `cached: true`.
 
+### Analytics endpoints
+
+- `GET /api/analytics/overview?range=7d|30d`
+- `GET /api/analytics/timeline?range=7d|30d`
+- `GET /api/analytics/parties?range=7d|30d`
+- `GET /api/analytics/sources?range=7d|30d`
+- `GET /api/analytics/topics?range=7d|30d`
+
+Analytics are calculated from collected PostgreSQL records. Timeline grouping uses `Asia/Bangkok`; party counts use only reviewed `article_parties` rows; topic results are keyword-frequency analysis from headlines, not verified event clustering.
+
+### `GET /api/cron/ingest`
+
+The scheduled endpoint requires `Authorization: Bearer $CRON_SECRET`. It is configured in `vercel.json` for `0 2 * * *` (09:00 Bangkok time). The endpoint is not a public write API.
+
 ## Vercel deployment
 
 The repository is prepared for the existing Vercel project `poliscope-ywc-react`:
@@ -116,10 +137,13 @@ The repository is prepared for the existing Vercel project `poliscope-ywc-react`
 - `api/index.js` exposes the Express application as the server function.
 - `vercel.json` routes `/api/*` to Express and all other paths to the React entrypoint.
 - Add `DATABASE_URL`, `NEWS_API_KEY`, `TYPHOON_API_KEY`, and `TYPHOON_MODEL` as server-side Vercel environment variables.
+- Add `CRON_SECRET` and optionally `NEWS_MAX_PAGES` as server-side Vercel environment variables.
 - Use the Supabase pooler URL and keep secrets out of Vite client variables.
 - Verify the project’s root directory is this repository and the framework/build settings match `npm run build` and `dist`.
 
 This repository does not deploy or push automatically. Before a release, run the local checks, then use the already-linked Vercel project and verify `/api/health`, `/api/news`, and a streamed summary in a preview deployment.
+
+Vercel Hobby cron is configured once per day. NewsData.io free-tier pagination and quotas limit how much history can be collected per run. The analytics dashboard reports only articles actually stored in PostgreSQL; a “30-day” view means collected articles published within the last 30 days, not all news published during that period. Trend comparison remains disabled until the database covers at least 14 calendar days.
 
 Reference: [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite), [Vercel Express deployment](https://vercel.com/docs/frameworks/backend/express), and [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build).
 

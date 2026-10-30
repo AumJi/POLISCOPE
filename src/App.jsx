@@ -17,6 +17,17 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 export const ARTICLE_EXCERPT_NOTICE = "ข้อมูลข่าวที่แสดงเป็นเนื้อหาย่อจากสำนักข่าว หากต้องการอ่านข่าวฉบับเต็ม กรุณาเปิดเว็บไซต์ต้นฉบับ";
 
@@ -100,6 +111,7 @@ function Header({ search, setSearch, onRefresh, mobileOpen, setMobileOpen }) {
         <Brand />
         <nav className="hidden items-center gap-7 text-sm font-medium text-slate-500 md:flex">
           <a className="text-navy" href="#latest">ข่าวล่าสุด</a>
+          <a href="/analytics" className="transition hover:text-navy">ภาพรวมข่าว</a>
           <a href="#about" className="transition hover:text-navy">เกี่ยวกับ POLISCOPE</a>
         </nav>
         <div className="hidden min-w-0 flex-1 justify-end gap-3 sm:flex md:max-w-sm">
@@ -218,7 +230,100 @@ function ArticleDrawer({ article, onClose }) {
   </div>;
 }
 
-function App() {
+function AnalyticsMetric({ label, value, detail }) {
+  return <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-3 text-3xl font-bold tracking-tight text-navy">{Number(value || 0).toLocaleString("th-TH")}</p>{detail && <p className="mt-2 text-xs text-slate-400">{detail}</p>}</div>;
+}
+
+function AnalyticsCard({ title, description, children, action }) {
+  return <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-bold text-navy">{title}</h2>{description && <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>}</div>{action}</div><div className="mt-5">{children}</div></section>;
+}
+
+function AnalyticsPage() {
+  const [range, setRange] = useState("30d");
+  const [partyFilter, setPartyFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [overview, setOverview] = useState(null);
+  const [timeline, setTimeline] = useState([]);
+  const [partyData, setPartyData] = useState([]);
+  const [sourceData, setSourceData] = useState([]);
+  const [topicData, setTopicData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [drilldown, setDrilldown] = useState(null);
+  const [relatedArticles, setRelatedArticles] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const query = new URLSearchParams({ range });
+    if (partyFilter) query.set("party", partyFilter);
+    if (sourceFilter) query.set("source", sourceFilter);
+    setLoading(true);
+    setError("");
+    Promise.all([
+      fetch(`/api/analytics/overview?${query}`).then((response) => response.json().then((payload) => ({ response, payload }))),
+      fetch(`/api/analytics/timeline?${query}`).then((response) => response.json().then((payload) => ({ response, payload }))),
+      fetch(`/api/analytics/parties?${query}`).then((response) => response.json().then((payload) => ({ response, payload }))),
+      fetch(`/api/analytics/sources?${query}`).then((response) => response.json().then((payload) => ({ response, payload }))),
+      fetch(`/api/analytics/topics?${query}`).then((response) => response.json().then((payload) => ({ response, payload }))),
+    ]).then(([overviewResult, timelineResult, partiesResult, sourcesResult, topicsResult]) => {
+      if (!active) return;
+      const failed = [overviewResult, timelineResult, partiesResult, sourcesResult, topicsResult].find((result) => !result.response.ok);
+      if (failed) throw new Error(failed.payload.error || "ไม่สามารถโหลดข้อมูลวิเคราะห์ได้");
+      setOverview(overviewResult.payload.overview);
+      setTimeline(timelineResult.payload.timeline || []);
+      setPartyData(partiesResult.payload.parties || []);
+      setSourceData(sourcesResult.payload.sources || []);
+      setTopicData(topicsResult.payload);
+    }).catch((loadError) => {
+      if (active) setError(loadError.message || "ไม่สามารถโหลดข้อมูลวิเคราะห์ได้");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [range, partyFilter, sourceFilter]);
+
+  useEffect(() => {
+    let active = true;
+    if (!drilldown) {
+      setRelatedArticles([]);
+      return undefined;
+    }
+    setRelatedLoading(true);
+    const load = drilldown.kind === "topic"
+      ? Promise.all((drilldown.articleIds || []).map((id) => fetch(`/api/news/${encodeURIComponent(id)}`).then((response) => response.ok ? response.json() : null))).then((items) => items.filter(Boolean).map((item) => item.article))
+      : fetch(`/api/news?${drilldown.kind === "party" ? "party" : "source"}=${encodeURIComponent(drilldown.value)}`).then((response) => response.json()).then((payload) => payload.articles || []);
+    load.then((articles) => { if (active) setRelatedArticles(articles); }).catch(() => { if (active) setRelatedArticles([]); }).finally(() => { if (active) setRelatedLoading(false); });
+    return () => { active = false; };
+  }, [drilldown]);
+
+  const navigateToFeed = () => { window.history.pushState({}, "", "/"); window.dispatchEvent(new PopStateEvent("popstate")); };
+  const number = (value) => Number(value || 0).toLocaleString("th-TH");
+  const dateLabel = (value) => value ? new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(new Date(`${value}T00:00:00+07:00`)) : "ไม่พบข้อมูล";
+  const chartTimeline = timeline.map((item) => ({ ...item, label: item.date.slice(5) }));
+  const chartParties = partyData.map((item) => ({ ...item, displayName: item.shortName || item.name }));
+  const chartSources = sourceData.map((item) => ({ ...item, displayName: item.name }));
+  const openParty = (state) => { const item = state?.activePayload?.[0]?.payload; if (item) setDrilldown({ kind: "party", value: item.code, label: item.name }); };
+  const openSource = (state) => { const item = state?.activePayload?.[0]?.payload; if (item) setDrilldown({ kind: "source", value: item.sourceKey, label: item.name }); };
+  const openTopic = (topic) => setDrilldown({ kind: "topic", value: topic.keyword, label: topic.keyword, articleIds: topic.articles.map((article) => article.id) });
+
+  return <div className="min-h-screen bg-canvas text-navy"><header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl"><div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-4 sm:px-8 lg:px-10"><Brand /><nav className="flex items-center gap-3 text-sm font-semibold"><a href="/" className="rounded-xl px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-navy">ข่าวล่าสุด</a><span className="rounded-xl bg-blue-50 px-3 py-2 text-poliscope">ภาพรวมข่าว</span></nav></div></header><main className="mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:px-10 lg:py-14"><div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end"><div><button onClick={navigateToFeed} className="mb-4 flex items-center gap-2 text-sm font-semibold text-poliscope"><ArrowLeft size={16} /> กลับไปยังข่าวล่าสุด</button><p className="text-sm font-bold uppercase tracking-[0.2em] text-poliscope">Analytics</p><h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">ภาพรวมข่าวการเมือง</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">สถิตินี้คำนวณจากข่าวที่ POLISCOPE รวบรวมได้ ไม่ใช่ข่าวทั้งหมดที่เผยแพร่</p></div><div className="flex flex-wrap gap-2"><button onClick={() => setRange("7d")} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${range === "7d" ? "bg-navy text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>7 วันที่ผ่านมา</button><button onClick={() => setRange("30d")} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${range === "30d" ? "bg-navy text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>30 วันที่ผ่านมา</button></div></div>
+    <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{loading ? ["a", "b", "c", "d"].map((key) => <div key={key} className="h-32 animate-pulse rounded-3xl bg-slate-200" />) : <><AnalyticsMetric label="จำนวนข่าวที่รวบรวม" value={overview?.totalArticles} detail={`${number(overview?.totalArticlesInRange)} ข่าวในช่วงที่เลือก`} /><AnalyticsMetric label="จำนวนสำนักข่าว" value={overview?.totalSources} /><AnalyticsMetric label="พรรคการเมืองที่พบ" value={overview?.totalParties} /><AnalyticsMetric label="ข่าวที่สรุปด้วย Typhoon AI" value={overview?.totalSummarizedArticles} /></>}</div>
+    <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between"><span>ช่วงข้อมูลที่รวบรวม: {dateLabel(overview?.earliestCollectedArticleDate?.slice?.(0, 10))} – {dateLabel(overview?.latestCollectedArticleDate?.slice?.(0, 10))}</span><span className="text-xs text-blue-700">นำเข้าล่าสุด: {overview?.lastIngestedAt ? formatDate(overview.lastIngestedAt) : "ไม่พบข้อมูล"}</span></div>
+    <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row"><label className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-600">พรรคการเมือง<select value={partyFilter} onChange={(event) => setPartyFilter(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-normal text-navy"><option value="">ทุกพรรค</option>{partyData.map((party) => <option key={party.code} value={party.code}>{party.name}</option>)}</select></label><label className="flex flex-1 items-center gap-3 text-sm font-semibold text-slate-600">สำนักข่าว<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-normal text-navy"><option value="">ทุกสำนักข่าว</option>{sourceData.map((source) => <option key={source.sourceKey} value={source.sourceKey}>{source.name}</option>)}</select></label></div>
+    {error && <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900"><div className="flex items-start gap-3"><AlertCircle className="shrink-0" size={18} /><div><p className="font-bold">ยังโหลดข้อมูลวิเคราะห์ไม่ได้</p><p className="mt-1">{error}</p></div></div></div>}
+      {!error && <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_1fr]"><AnalyticsCard title="จำนวนข่าวที่รวบรวม" description={`ข่าวการเมืองที่เผยแพร่ในช่วง ${range === "7d" ? "7" : "30"} วันที่เลือก · แบ่งตามวันที่เผยแพร่`}><div className="h-72">{chartTimeline.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={chartTimeline}><defs><linearGradient id="newsVolume" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3157A5" stopOpacity={0.28} /><stop offset="95%" stopColor="#3157A5" stopOpacity={0} /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [value, "ข่าว"]} labelFormatter={(label) => `วันที่ ${label}`} /><Area type="monotone" dataKey="articleCount" stroke="#3157A5" fill="url(#newsVolume)" strokeWidth={2.5} /></AreaChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-400">ยังไม่มีข้อมูลในช่วงนี้</div>}</div></AnalyticsCard><AnalyticsCard title="ข่าวที่กล่าวถึงพรรคการเมือง" description="จำนวนบทความที่มีความสัมพันธ์กับพรรคและผ่านการตรวจสอบแล้ว"><div className="h-72">{chartParties.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={chartParties} layout="vertical" margin={{ left: 12, right: 12 }} onClick={openParty}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" /><XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} /><YAxis type="category" dataKey="displayName" width={90} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [value, "ข่าว"]} /><Bar dataKey="articleCount" fill="#3157A5" radius={[0, 6, 6, 0]} cursor="pointer" /></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-400">ยังไม่มีข้อมูลพรรคที่ตรวจสอบแล้ว</div>}</div></AnalyticsCard><AnalyticsCard title="จำนวนข่าวตามสำนักข่าว" description="จำนวนบทความการเมืองที่เก็บได้จากแต่ละแหล่งข่าว"><div className="h-72">{chartSources.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={chartSources} margin={{ bottom: 36 }} onClick={openSource}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="displayName" angle={-24} textAnchor="end" height={60} interval={0} tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => [value, "ข่าว"]} /><Bar dataKey="articleCount" fill="#5d7bc2" radius={[6, 6, 0, 0]} cursor="pointer" /></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-400">ยังไม่มีข้อมูลสำนักข่าว</div>}</div></AnalyticsCard><AnalyticsCard title="ประเด็นที่ถูกกล่าวถึงบ่อย" description="การวิเคราะห์คำสำคัญจากพาดหัวข่าว ไม่ใช่การจัดกลุ่มเหตุการณ์ที่ผ่านการตรวจสอบ"><div className="space-y-2">{topicData?.topics?.length ? topicData.topics.map((topic) => <button key={topic.keyword} onClick={() => openTopic(topic)} className="flex w-full items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-left transition hover:bg-blue-50"><span className="font-semibold text-navy">{topic.keyword}</span><span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-poliscope">{number(topic.articleCount)} ข่าว</span></button>) : <p className="text-sm text-slate-400">ยังไม่มีหัวข้อที่เพียงพอสำหรับการแสดงผล</p>}</div></AnalyticsCard></div>}
+    <section className="mt-6 rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6"><div className="flex items-start gap-3"><div className="rounded-xl bg-blue-50 p-2 text-poliscope"><TrendingUpIcon /></div><div><h2 className="text-lg font-bold text-navy">ประเด็นที่มีการรายงานเพิ่มขึ้น</h2><p className="mt-1 text-sm leading-6 text-slate-500">เปรียบเทียบจำนวนข่าวใน 7 วันล่าสุดกับ 7 วันก่อนหน้า ไม่ใช่ความนิยม ความเห็นสาธารณะ หรือความสำเร็จทางการเมือง</p></div></div>{topicData?.trendAvailable ? topicData.trends?.length ? <div className="mt-5 grid gap-3 md:grid-cols-2">{topicData.trends.map((trend) => <button key={trend.keyword} onClick={() => openTopic({ keyword: trend.keyword, articles: trend.articles })} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left hover:border-blue-200 hover:bg-blue-50"><div className="flex items-center justify-between"><span className="font-semibold text-navy">{trend.keyword}</span><span className="text-sm font-bold text-emerald-700">+{number(trend.difference)}</span></div><p className="mt-2 text-xs text-slate-500">ล่าสุด {number(trend.recentArticleCount)} ข่าว · ช่วงก่อน {number(trend.previousArticleCount)} ข่าว</p></button>)}</div> : <p className="mt-5 text-sm text-slate-400">ยังไม่พบหัวข้อที่มีปริมาณข่าวเพิ่มขึ้น</p> : <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">{topicData?.trendReason || "ต้องมีข้อมูลข่าวที่ครอบคลุมอย่างน้อย 14 วันก่อนเปรียบเทียบแนวโน้ม"}</p>}</section>
+    {drilldown && <section className="mt-6 rounded-3xl border border-blue-100 bg-blue-50/40 p-5 sm:p-6"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-poliscope">Article drill-down</p><h2 className="mt-1 text-xl font-bold text-navy">ข่าวที่เกี่ยวข้องกับ {drilldown.label}</h2></div><button onClick={() => setDrilldown(null)} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600">ปิด</button></div>{relatedLoading ? <div className="mt-5 grid gap-4 md:grid-cols-2"><SkeletonCard /><SkeletonCard /></div> : relatedArticles.length ? <div className="mt-5 grid gap-4 md:grid-cols-2">{relatedArticles.map((article) => <NewsCard key={article.id} article={article} onOpen={setSelectedArticle} />)}</div> : <p className="mt-5 text-sm text-slate-500">ไม่พบข่าวที่เกี่ยวข้อง</p>}</section>}
+    <p className="mt-8 text-xs leading-6 text-slate-400">ตัวเลขทั้งหมดคำนวณจากบทความการเมืองที่มีอยู่ใน PostgreSQL โดยแยกวันที่เผยแพร่จากวันที่นำเข้า และไม่ใช่สถิติข่าวการเมืองทั้งหมดในโลก</p></main><ArticleDrawer article={selectedArticle} onClose={() => setSelectedArticle(null)} /></div>;
+}
+
+function TrendingUpIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>;
+}
+
+function NewsFeed() {
   const [articles, setArticles] = useState([]);
   const [totalArticles, setTotalArticles] = useState(0);
   const [parties, setParties] = useState([]);
@@ -279,6 +384,18 @@ function App() {
     </main>
     <ArticleDrawer article={selectedArticle} onClose={() => setSelectedArticle(null)} />
   </div>;
+}
+
+function App() {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  return pathname === "/analytics" ? <AnalyticsPage /> : <NewsFeed />;
 }
 
 export default App;
