@@ -1,5 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLITICAL_RSS_CATEGORIES = new Set(["politics", "political", "politics_government", "การเมือง"]);
+export const INVESTMENT_RSS_CATEGORIES = new Set(["business", "finance", "economy", "markets", "market", "investment", "stocks", "gold", "oil", "forex", "การเงิน", "เศรษฐกิจ", "ตลาดทุน", "หุ้น", "ทองคำ", "น้ำมัน"]);
 
 export class RssError extends Error {
   constructor(message, { status = 502, code = "NEWS_PROVIDER_ERROR" } = {}) {
@@ -66,15 +67,15 @@ function sourceFromUrl(url) {
   }
 }
 
-export function parsePoliticalRss(xml, feedUrl) {
+export function parseRssArticles(xml, feedUrl, { categories: allowedCategories = POLITICAL_RSS_CATEGORIES, outputCategory = "politics" } = {}) {
   const items = [...String(xml || "").matchAll(/<(?:item|entry)\b[^>]*>([\s\S]*?)<\/(?:item|entry)>/gi)].map((match) => match[1]);
   const feedSource = sourceFromUrl(feedUrl);
 
   return items.map((item) => {
     const originalUrl = cleanText(extractTag(item, ["link"])) || cleanText(extractTag(item, ["guid", "id"]));
     const title = cleanText(extractTag(item, ["title"]));
-    const categories = extractTags(item, "category").map((category) => category.toLowerCase());
-    if (!originalUrl || !title || !categories.some((category) => POLITICAL_RSS_CATEGORIES.has(category))) return null;
+    const itemCategories = extractTags(item, "category").map((category) => category.toLowerCase());
+    if (!originalUrl || !title || !itemCategories.some((category) => allowedCategories.has(category))) return null;
 
     return {
       externalId: cleanText(extractTag(item, ["guid", "id"])),
@@ -83,12 +84,20 @@ export function parsePoliticalRss(xml, feedUrl) {
       content: cleanText(extractTag(item, ["content:encoded", "content"])),
       originalUrl,
       imageUrl: null,
-      category: "politics",
-      categories: ["politics"],
+      category: outputCategory,
+      categories: [outputCategory],
       publishedAt: normalizeDate(extractTag(item, ["pubDate", "published", "updated"])),
       source: feedSource,
     };
   }).filter(Boolean);
+}
+
+export function parsePoliticalRss(xml, feedUrl) {
+  return parseRssArticles(xml, feedUrl, { categories: POLITICAL_RSS_CATEGORIES, outputCategory: "politics" });
+}
+
+export function parseInvestmentRss(xml, feedUrl) {
+  return parseRssArticles(xml, feedUrl, { categories: INVESTMENT_RSS_CATEGORIES, outputCategory: "investment" });
 }
 
 export function parseRssFeeds(value) {
@@ -98,6 +107,8 @@ export function parseRssFeeds(value) {
 export async function fetchRssPages({
   feeds = parseRssFeeds(process.env.RSS_FEEDS),
   fetchImpl = fetch,
+  categories = POLITICAL_RSS_CATEGORIES,
+  outputCategory = "politics",
 } = {}) {
   if (!feeds.length) throw new RssError("No RSS feeds are configured", { status: 503, code: "RSS_FEEDS_NOT_CONFIGURED" });
 
@@ -115,7 +126,7 @@ export async function fetchRssPages({
         continue;
       }
       const xml = await response.text();
-      articles.push(...parsePoliticalRss(xml, feedUrl));
+      articles.push(...parseRssArticles(xml, feedUrl, { categories, outputCategory }));
     } catch {
       errors.push({ feedUrl, status: "unreachable" });
     }

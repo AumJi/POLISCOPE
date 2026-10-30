@@ -13,12 +13,12 @@ export class CurrentsError extends Error {
   }
 }
 
-export function buildCurrentsSearchUrl({ pageSize = 10, cursor } = {}) {
+export function buildCurrentsSearchUrl({ pageSize = 10, cursor, category = CURRENTS_POLITICAL_CATEGORY, language = "th", country = "TH" } = {}) {
   const url = new URL(CURRENTS_SEARCH_ENDPOINT);
   const searchParams = new URLSearchParams({
-    category: CURRENTS_POLITICAL_CATEGORY,
-    language: "th",
-    country: "TH",
+    category,
+    language,
+    country,
     type: "1",
     page_size: String(Math.min(Math.max(pageSize, 1), 20)),
   });
@@ -70,7 +70,7 @@ function sourceWebsite(originalUrl) {
   }
 }
 
-export function normalizeCurrentsArticle(raw) {
+export function normalizeCurrentsArticle(raw, { requiredCategory = CURRENTS_POLITICAL_CATEGORY, outputCategory = POLISCOPE_POLITICAL_CATEGORY, requiredLanguage = "th" } = {}) {
   if (!raw || typeof raw !== "object") return null;
 
   const originalUrl = asText(raw.url);
@@ -80,11 +80,11 @@ export function normalizeCurrentsArticle(raw) {
 
   // The query requests Thai. Reject a response that explicitly identifies itself
   // as another language so international articles cannot leak into the Thai feed.
-  if (!originalUrl || !title || !hasPoliticalCategory(raw.category) || language !== "th") return null;
+  if (!originalUrl || !title || !categories.includes(requiredCategory) || language !== requiredLanguage) return null;
 
   const sourceKey = normalizeSourceKey(raw, originalUrl);
   const sourceName = asText(raw.source_name) || asText(raw.source?.name) || asText(raw.publisher) || sourceKey;
-  const normalizedCategories = categories.map((category) => category === CURRENTS_POLITICAL_CATEGORY ? POLISCOPE_POLITICAL_CATEGORY : category);
+  const normalizedCategories = categories.map((category) => category === requiredCategory ? outputCategory : category);
 
   return {
     externalId: asText(raw.id),
@@ -130,12 +130,16 @@ export async function fetchCurrents({
   fetchImpl = fetch,
   pageSize = 10,
   cursor,
+  category = CURRENTS_POLITICAL_CATEGORY,
+  outputCategory = POLISCOPE_POLITICAL_CATEGORY,
+  language = "th",
+  country = "TH",
 } = {}) {
   if (!apiKey) throw new CurrentsError("Currents API key is not configured", { status: 503, code: "NEWS_API_NOT_CONFIGURED" });
 
   let response;
   try {
-    response = await fetchImpl(buildCurrentsSearchUrl({ pageSize, cursor }), {
+    response = await fetchImpl(buildCurrentsSearchUrl({ pageSize, cursor, category, language, country }), {
       headers: { Accept: "application/json", Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(10_000),
     });
@@ -154,7 +158,7 @@ export async function fetchCurrents({
 
   const rawArticles = Array.isArray(payload?.news) ? payload.news : [];
   return {
-    articles: deduplicateArticles(rawArticles.map(normalizeCurrentsArticle).filter(Boolean)).slice(0, pageSize),
+    articles: deduplicateArticles(rawArticles.map((article) => normalizeCurrentsArticle(article, { requiredCategory: category, outputCategory, requiredLanguage: language })).filter(Boolean)).slice(0, pageSize),
     totalResults: rawArticles.length,
     nextPage: asText(payload?.next_cursor),
     cursor: cursor || null,
@@ -174,6 +178,10 @@ export async function fetchCurrentsPages({
   pageSize = 10,
   maxPages = process.env.NEWS_MAX_PAGES || DEFAULT_MAX_INGESTION_PAGES,
   fetcher = fetchCurrents,
+  category = CURRENTS_POLITICAL_CATEGORY,
+  outputCategory = POLISCOPE_POLITICAL_CATEGORY,
+  language = "th",
+  country = "TH",
 } = {}) {
   const pageLimit = normalizePageLimit(maxPages);
   const articles = [];
@@ -182,7 +190,7 @@ export async function fetchCurrentsPages({
   let pagesFetched = 0;
 
   for (let pageNumber = 0; pageNumber < pageLimit; pageNumber += 1) {
-    const batch = await fetcher({ apiKey, fetchImpl, pageSize, cursor });
+    const batch = await fetcher({ apiKey, fetchImpl, pageSize, cursor, category, outputCategory, language, country });
     pagesFetched += 1;
     articles.push(...batch.articles);
     nextPage = batch.nextPage || null;

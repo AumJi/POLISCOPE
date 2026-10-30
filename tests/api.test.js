@@ -7,7 +7,7 @@ describe("HTTP API validation", () => {
     const response = await request(app).get("/api/health");
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ status: "ok", service: "poliscope-api" });
+    expect(response.body).toMatchObject({ status: "ok", service: "marketscope-api" });
     expect(response.body).not.toHaveProperty("databaseUrl");
     expect(response.body).not.toHaveProperty("newsApiKey");
     expect(response.body).not.toHaveProperty("typhoonApiKey");

@@ -41,7 +41,7 @@ export async function refreshNews({
 
   ingestionInProgress = true;
   try {
-    const fetched = await selectedFetcher({ apiKey: configuredProvider.apiKey, feeds: configuredProvider.feeds, maxPages });
+    const fetched = await selectedFetcher({ apiKey: configuredProvider.apiKey, feeds: configuredProvider.feeds, maxPages, ...configuredProvider.fetchOptions });
     const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
     const tagging = tagParties && isDatabaseConfigured && persisted?.articles?.length
       ? await partyTagger(persisted.articles)

@@ -1,5 +1,6 @@
 import { withTransaction } from "../db/query.js";
 import { findPartyMatches } from "../parties/matcher.js";
+import { findAssetMatches } from "../assets/matcher.js";
 
 export async function persistNewsArticles(articles) {
   return withTransaction(async (client) => {
@@ -13,6 +14,12 @@ export async function persistNewsArticles(articles) {
       ORDER BY name ASC
     `, ["TH"]);
     const parties = partiesResult.rows;
+    const assetsResult = await client.query(`
+      SELECT id, symbol, name, asset_type, category
+      FROM market_assets
+      ORDER BY symbol ASC
+    `);
+    const assets = assetsResult.rows;
 
     for (const article of articles) {
       const sourceResult = await client.query(`
@@ -82,8 +89,20 @@ export async function persistNewsArticles(articles) {
         articleId = insertedResult.rows[0]?.id;
       }
 
-      const matches = findPartyMatches(article, parties);
-      savedArticles.push({ ...article, id: articleId, isNew, candidateMatches: matches });
+      const isInvestment = String(article.category || "").toLowerCase().split(",").includes("investment");
+      const matches = isInvestment ? findAssetMatches(article, assets) : findPartyMatches(article, parties);
+      for (const match of matches) {
+        if (isInvestment) {
+          await client.query(`
+            INSERT INTO article_assets (article_id, asset_id, relation_type, tagging_method, is_reviewed)
+            VALUES ($1, $2, $3, $4, false)
+            ON CONFLICT (article_id, asset_id) DO UPDATE SET
+              relation_type = CASE WHEN article_assets.is_reviewed THEN article_assets.relation_type ELSE EXCLUDED.relation_type END,
+              tagging_method = CASE WHEN article_assets.is_reviewed THEN article_assets.tagging_method ELSE EXCLUDED.tagging_method END
+          `, [articleId, match.assetId, match.relationType, match.taggingMethod]);
+        }
+      }
+      savedArticles.push({ ...article, id: articleId, isNew, candidateMatches: isInvestment ? [] : matches, candidateAssetMatches: isInvestment ? matches : [] });
 
       saved += 1;
     }
