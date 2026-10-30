@@ -44,10 +44,10 @@ export async function getInvestmentAnalyticsOverview({ range = "30d" } = {}) {
   };
 }
 
-export async function getInvestmentNewsVolume({ range = "30d", assetSymbol } = {}) {
+export async function getInvestmentNewsVolume({ range = "30d", assetSymbol, includeUnreviewed = false } = {}) {
   const { key, days } = parseMarketAnalyticsRange(range, "30d");
   const values = [days];
-  const assetFilter = assetSymbol ? `AND EXISTS (SELECT 1 FROM article_assets aa_filter INNER JOIN market_assets ma_filter ON ma_filter.id = aa_filter.asset_id WHERE aa_filter.article_id = a.id AND aa_filter.is_reviewed = true AND ma_filter.symbol = $2)` : "";
+  const assetFilter = assetSymbol ? `AND EXISTS (SELECT 1 FROM article_assets aa_filter INNER JOIN market_assets ma_filter ON ma_filter.id = aa_filter.asset_id WHERE aa_filter.article_id = a.id ${includeUnreviewed ? "" : "AND aa_filter.is_reviewed = true"} AND ma_filter.symbol = $2)` : "";
   if (assetSymbol) values.push(assetSymbol);
   const result = await query(`
     WITH bounds AS (
@@ -67,8 +67,9 @@ export async function getInvestmentNewsVolume({ range = "30d", assetSymbol } = {
   return { selectedRange: key, timeline: result.rows.map((row) => ({ date: row.date, articleCount: row.article_count || 0 })) };
 }
 
-export async function getInvestmentAssetCounts({ range = "30d" } = {}) {
+export async function getInvestmentAssetCounts({ range = "30d", includeUnreviewed = false } = {}) {
   const { key, days } = parseMarketAnalyticsRange(range, "30d");
+  const visibilitySql = includeUnreviewed ? "" : " AND aa.is_reviewed = true";
   const result = await query(`
     WITH bounds AS (
       SELECT ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - ($1::int - 1)) AS start_date,
@@ -76,13 +77,13 @@ export async function getInvestmentAssetCounts({ range = "30d" } = {}) {
     )
     SELECT ma.symbol, ma.name, ma.asset_class, COUNT(DISTINCT a.id)::int AS article_count
     FROM market_assets ma
-    LEFT JOIN article_assets aa ON aa.asset_id = ma.id AND aa.is_reviewed = true
+    LEFT JOIN article_assets aa ON aa.asset_id = ma.id${visibilitySql}
     LEFT JOIN articles a ON a.id = aa.article_id AND LOWER(a.category) = 'investment'
       AND a.published_at >= ((SELECT start_date FROM bounds)::timestamp AT TIME ZONE 'Asia/Bangkok')
       AND a.published_at < (((SELECT end_date FROM bounds) + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')
     GROUP BY ma.id ORDER BY ma.name ASC
   `, [days]);
-  return { selectedRange: key, assets: result.rows.map((row) => ({ symbol: row.symbol, name: row.name, assetType: row.asset_class, category: row.asset_class, articleCount: row.article_count || 0 })) };
+  return { selectedRange: key, includeUnreviewed, assets: result.rows.map((row) => ({ symbol: row.symbol, name: row.name, assetType: row.asset_class, category: row.asset_class, articleCount: row.article_count || 0 })) };
 }
 
 export async function getInvestmentTopicArticles({ days = 30 } = {}) {

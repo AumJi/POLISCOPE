@@ -55,13 +55,13 @@ router.get("/news-volume", asyncRoute(async (request, response) => {
   if (!requireDatabase(request, response)) return;
   const { key } = parseMarketAnalyticsRange(request.query.range, "30d");
   const assetSymbol = typeof request.query.asset === "string" ? request.query.asset.toUpperCase() : undefined;
-  response.json(await getInvestmentNewsVolume({ range: key, assetSymbol }));
+  response.json(await getInvestmentNewsVolume({ range: key, assetSymbol, includeUnreviewed: request.query.includeUnreviewed === "true" }));
 }));
 
 router.get("/asset-news", asyncRoute(async (request, response) => {
   if (!requireDatabase(request, response)) return;
   const { key } = parseMarketAnalyticsRange(request.query.range, "30d");
-  response.json(await getInvestmentAssetCounts({ range: key }));
+  response.json(await getInvestmentAssetCounts({ range: key, includeUnreviewed: request.query.includeUnreviewed === "true" }));
 }));
 
 router.get("/investment-topics", asyncRoute(async (request, response) => {

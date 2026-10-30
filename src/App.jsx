@@ -124,7 +124,8 @@ function MetricCard({ label, value, detail, icon: Icon }) {
 }
 
 function Panel({ title, eyebrow, children, action }) {
-  return <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div>{eyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-poliscope">{eyebrow}</p>}<h2 className="mt-1 text-xl font-bold text-navy">{title}</h2></div>{action}</div>{children}</section>;
+  const displayEyebrow = eyebrow === "Reviewed associations" ? "Reviewed + AI suggestions" : eyebrow;
+  return <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div>{displayEyebrow && <p className="text-xs font-bold uppercase tracking-[0.18em] text-poliscope">{displayEyebrow}</p>}<h2 className="mt-1 text-xl font-bold text-navy">{title}</h2></div>{action}</div>{children}</section>;
 }
 
 function RangeButtons({ value, onChange, values = ["7d", "30d", "90d"] }) {
@@ -205,11 +206,12 @@ function DashboardPage() {
   const [overview, setOverview] = useState(null);
   const [volume, setVolume] = useState([]);
   const [assetNews, setAssetNews] = useState([]);
+  const [includeUnreviewedAssets, setIncludeUnreviewedAssets] = useState(true);
   const [topics, setTopics] = useState([]);
   const [error, setError] = useState("");
   const selectedAsset = assets.find((asset) => asset.symbol === selectedSymbol);
 
-  useEffect(() => { Promise.all([apiJson("/api/markets"), apiJson(`/api/analytics/overview?range=${range}`), apiJson(`/api/analytics/news-volume?range=${range}`), apiJson(`/api/analytics/asset-news?range=${range}`), apiJson(`/api/analytics/investment-topics?range=${range}`)]).then(([marketData, overviewData, volumeData, assetData, topicData]) => { setAssets(marketData.assets || []); setOverview(overviewData.overview); setVolume(volumeData.timeline || []); setAssetNews(assetData.assets || []); setTopics(topicData.topics || []); }).catch((loadError) => setError(loadError.message)); }, [range]);
+  useEffect(() => { Promise.all([apiJson("/api/markets"), apiJson(`/api/analytics/overview?range=${range}`), apiJson(`/api/analytics/news-volume?range=${range}`), apiJson(`/api/analytics/asset-news?range=${range}&includeUnreviewed=${includeUnreviewedAssets}`), apiJson(`/api/analytics/investment-topics?range=${range}`)]).then(([marketData, overviewData, volumeData, assetData, topicData]) => { setAssets(marketData.assets || []); setOverview(overviewData.overview); setVolume(volumeData.timeline || []); setAssetNews(assetData.assets || []); setTopics(topicData.topics || []); }).catch((loadError) => setError(loadError.message)); }, [range, includeUnreviewedAssets]);
   useEffect(() => { if (!selectedSymbol) return; setMarket((current) => ({ ...current, loading: true })); Promise.all([apiJson(`/api/markets/${selectedSymbol}/history?range=${range}`), apiJson(`/api/markets/${selectedSymbol}/analytics?range=${range}`)]).then(([history, analytics]) => setMarket({ observations: history.observations || [], analytics: analytics.analytics, loading: false })).catch((loadError) => setMarket({ observations: [], analytics: null, loading: false, error: loadError.message })); }, [selectedSymbol, range]);
 
   const cards = useMemo(() => assets.map((asset) => ({ ...asset, periodChange: asset.symbol === selectedSymbol ? market.analytics?.percentageChange : undefined })), [assets, selectedSymbol, market.analytics]);
