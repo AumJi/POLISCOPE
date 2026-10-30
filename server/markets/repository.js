@@ -102,23 +102,38 @@ export async function persistMarketObservations(results) {
     let saved = 0;
     for (const result of results) {
       const assetId = assetIds.get(result.asset.symbol);
-      if (!assetId) continue;
-      for (const observation of result.observations) {
-        await client.query(`
-          INSERT INTO market_prices (
-            asset_id, price_date, open_price, high_price, low_price, close_price, volume, retrieved_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-          ON CONFLICT (asset_id, price_date) DO UPDATE SET
-            open_price = EXCLUDED.open_price,
-            high_price = EXCLUDED.high_price,
-            low_price = EXCLUDED.low_price,
-            close_price = EXCLUDED.close_price,
-            volume = EXCLUDED.volume,
-            retrieved_at = NOW()
-        `, [assetId, observation.priceDate, observation.open, observation.high, observation.low, observation.close, observation.volume]);
-        saved += 1;
-      }
+      const observations = Array.isArray(result.observations) ? result.observations : [];
+      if (!assetId || !observations.length) continue;
+
+      const values = [
+        observations.map(() => assetId),
+        observations.map((observation) => observation.priceDate),
+        observations.map((observation) => observation.open),
+        observations.map((observation) => observation.high),
+        observations.map((observation) => observation.low),
+        observations.map((observation) => observation.close),
+        observations.map((observation) => observation.volume),
+      ];
+
+      const insertResult = await client.query(`
+        INSERT INTO market_prices (
+          asset_id, price_date, open_price, high_price, low_price, close_price, volume, retrieved_at
+        )
+        SELECT rows.asset_id, rows.price_date, rows.open_price, rows.high_price,
+               rows.low_price, rows.close_price, rows.volume, NOW()
+        FROM UNNEST(
+          $1::uuid[], $2::date[], $3::numeric[], $4::numeric[],
+          $5::numeric[], $6::numeric[], $7::numeric[]
+        ) AS rows(asset_id, price_date, open_price, high_price, low_price, close_price, volume)
+        ON CONFLICT (asset_id, price_date) DO UPDATE SET
+          open_price = EXCLUDED.open_price,
+          high_price = EXCLUDED.high_price,
+          low_price = EXCLUDED.low_price,
+          close_price = EXCLUDED.close_price,
+          volume = EXCLUDED.volume,
+          retrieved_at = NOW()
+      `, values);
+      saved += insertResult.rowCount;
     }
     return saved;
   });

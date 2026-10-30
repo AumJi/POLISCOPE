@@ -7,7 +7,7 @@ import {
   normalizeCategories,
   normalizeNewsArticle,
 } from "../server/news/newsData.js";
-import { NEWS_CACHE_TTL_MS, clearNewsCache, refreshNews } from "../server/news/service.js";
+import { NEWS_CACHE_TTL_MS, clearNewsCache, isPoliticalArticle, refreshNews } from "../server/news/service.js";
 
 describe("NewsData integration", () => {
   it("builds the documented Thai politics request with a size limit", () => {
@@ -95,6 +95,11 @@ describe("NewsData integration", () => {
 });
 
 describe("news refresh policy", () => {
+  it("only treats explicitly political categories as political", () => {
+    expect(isPoliticalArticle({ category: "investment" })).toBe(false);
+    expect(isPoliticalArticle({ category: "business,politics" })).toBe(true);
+  });
+
   it("uses the successful in-memory result during the cache window", async () => {
     clearNewsCache();
     let clock = 1_000;

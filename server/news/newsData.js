@@ -173,6 +173,7 @@ export async function fetchNewsDataPages({
   size = 10,
   maxPages = process.env.NEWS_MAX_PAGES || DEFAULT_MAX_INGESTION_PAGES,
   fetcher = fetchNewsData,
+  onProgress = () => {},
 } = {}) {
   const pageLimit = normalizePageLimit(maxPages);
   const articles = [];
@@ -187,6 +188,7 @@ export async function fetchNewsDataPages({
     articles.push(...batch.articles);
     totalResults = Math.max(totalResults, batch.totalResults || 0);
     nextPage = batch.nextPage || null;
+    onProgress({ page: pagesFetched, articles: batch.articles.length, hasNextPage: Boolean(nextPage) });
     if (!nextPage) break;
     page = nextPage;
   }

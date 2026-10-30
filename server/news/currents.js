@@ -193,6 +193,7 @@ export async function fetchCurrentsPages({
   outputCategory = POLISCOPE_POLITICAL_CATEGORY,
   language = "th",
   country = "TH",
+  onProgress = () => {},
 } = {}) {
   const pageLimit = normalizePageLimit(maxPages);
   const articles = [];
@@ -205,6 +206,7 @@ export async function fetchCurrentsPages({
     pagesFetched += 1;
     articles.push(...batch.articles);
     nextPage = batch.nextPage || null;
+    onProgress({ page: pagesFetched, articles: batch.articles.length, hasNextPage: Boolean(nextPage) });
     if (!nextPage) break;
     cursor = nextPage;
   }

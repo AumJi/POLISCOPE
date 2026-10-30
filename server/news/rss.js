@@ -109,6 +109,7 @@ export async function fetchRssPages({
   fetchImpl = fetch,
   categories = POLITICAL_RSS_CATEGORIES,
   outputCategory = "politics",
+  onProgress = () => {},
 } = {}) {
   if (!feeds.length) throw new RssError("No RSS feeds are configured", { status: 503, code: "RSS_FEEDS_NOT_CONFIGURED" });
 
@@ -130,6 +131,7 @@ export async function fetchRssPages({
     } catch {
       errors.push({ feedUrl, status: "unreachable" });
     }
+    onProgress({ feedUrl, articles: articles.length, status: response?.ok ? "succeeded" : "failed" });
   }
 
   if (!articles.length && errors.length === feeds.length) throw new RssError("Configured RSS feeds were unavailable", { code: "RSS_PROVIDER_UNAVAILABLE" });

@@ -16,6 +16,14 @@ export function isNewsIngestionRunning() {
   return ingestionInProgress;
 }
 
+export function isPoliticalArticle(article) {
+  return String(article?.category || "")
+    .toLowerCase()
+    .split(",")
+    .map((category) => category.trim())
+    .includes("politics");
+}
+
 export async function refreshNews({
   force = false,
   now = () => Date.now(),
@@ -25,6 +33,7 @@ export async function refreshNews({
   tagParties = true,
   maxPages,
   providerConfig,
+  onProgress,
 } = {}) {
   if (!force && memoryCache && now() - memoryCache.cachedAt < NEWS_CACHE_TTL_MS) {
     return { ...memoryCache.value, cached: true };
@@ -41,10 +50,16 @@ export async function refreshNews({
 
   ingestionInProgress = true;
   try {
-    const fetched = await selectedFetcher({ apiKey: configuredProvider.apiKey, feeds: configuredProvider.feeds, maxPages, ...configuredProvider.fetchOptions });
+    const fetched = await selectedFetcher({ apiKey: configuredProvider.apiKey, feeds: configuredProvider.feeds, maxPages, onProgress, ...configuredProvider.fetchOptions });
     const persisted = isDatabaseConfigured ? await persister(fetched.articles) : 0;
-    const tagging = tagParties && isDatabaseConfigured && persisted?.articles?.length
-      ? await partyTagger(persisted.articles)
+    // Party tagging is only meaningful for political articles. Investment
+    // ingestion already performs deterministic asset matching and must not
+    // trigger one Typhoon request per article for party extraction.
+    const politicalArticles = Array.isArray(persisted?.articles)
+      ? persisted.articles.filter(isPoliticalArticle)
+      : [];
+    const tagging = tagParties && isDatabaseConfigured && politicalArticles.length
+      ? await partyTagger(politicalArticles)
       : null;
     const savedCount = typeof persisted === "number" ? persisted : persisted?.saved || 0;
     const value = {
