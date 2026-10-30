@@ -10,6 +10,7 @@
     "dev": "concurrently -k \"vite\" \"node --watch server/index.js\"",
     "build": "vite build",
     "ingest:news": "node scripts/ingest-news.js",
+    "ingest:markets": "node scripts/ingest-markets.js",
     "retag:parties": "node scripts/retag-parties.js",
     "start": "node server/index.js",
     "test": "vitest run"

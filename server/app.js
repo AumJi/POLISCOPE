@@ -13,11 +13,13 @@ import {
 import { isNewsIngestionRunning, refreshNews } from "./news/service.js";
 import { getNewsProviderConfig, isNewsProviderConfigured } from "./news/provider.js";
 import analyticsRouter from "./analytics/routes.js";
+import marketRouter from "./markets/routes.js";
 
 const app = express();
 
 app.use(express.json({ limit: "32kb" }));
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/markets", marketRouter);
 
 function withTimeout(promise, milliseconds) {
   let timer;
@@ -39,6 +41,7 @@ app.get("/api/health", (_request, response) => {
       newsDataApi: Boolean(process.env.NEWS_API_KEY),
       rssProvider: Boolean(process.env.RSS_FEEDS),
       typhoonApi: Boolean(process.env.TYPHOON_API_KEY),
+      alphaVantageApi: Boolean(process.env.ALPHA_VANTAGE_API_KEY),
     },
   });
 });
