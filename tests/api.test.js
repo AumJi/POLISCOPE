@@ -42,4 +42,15 @@ describe("HTTP API validation", () => {
     expect(response.status).toBe(503);
     expect(response.body.error).toBe("Database is not configured");
   });
+
+  it("rejects unauthorized scheduled ingestion", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "test-cron-secret";
+    const response = await request(app).get("/api/cron/ingest").set("Authorization", "Bearer wrong-secret");
+    if (previousSecret === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previousSecret;
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("Unauthorized");
+  });
 });

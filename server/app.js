@@ -10,11 +10,21 @@ import {
   saveSummary,
   streamSummary,
 } from "./ai/summarize.js";
-import { refreshNews } from "./news/service.js";
+import { isNewsIngestionRunning, refreshNews } from "./news/service.js";
+import analyticsRouter from "./analytics/routes.js";
 
 const app = express();
 
 app.use(express.json({ limit: "32kb" }));
+app.use("/api/analytics", analyticsRouter);
+
+function withTimeout(promise, milliseconds) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error("News ingestion timed out"), { status: 504, code: "NEWS_INGESTION_TIMEOUT" })), milliseconds);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 app.get("/api/health", (_request, response) => {
   response.json({
@@ -30,9 +40,13 @@ app.get("/api/health", (_request, response) => {
 
 app.get("/api/news", async (request, response, next) => {
   const partyCode = typeof request.query.party === "string" ? request.query.party.trim() : undefined;
+  const sourceKey = typeof request.query.source === "string" ? request.query.source.trim() : undefined;
 
   if (partyCode && !/^[a-zA-Z0-9_-]{1,120}$/.test(partyCode)) {
     return response.status(400).json({ error: "Invalid party code" });
+  }
+  if (sourceKey && !/^[a-zA-Z0-9_-]{1,120}$/.test(sourceKey)) {
+    return response.status(400).json({ error: "Invalid source key" });
   }
 
   if (!isDatabaseConfigured) {
@@ -43,15 +57,15 @@ app.get("/api/news", async (request, response, next) => {
   let refreshError = null;
 
   try {
-    refresh = await refreshNews();
+    refresh = await refreshNews({ maxPages: 1 });
   } catch (error) {
     refreshError = error;
   }
 
   try {
     const [articles, total] = await Promise.all([
-      listNews({ partyCode, limit: 10 }),
-      countNews({ partyCode }),
+      listNews({ partyCode, sourceKey, limit: 10 }),
+      countNews({ partyCode, sourceKey }),
     ]);
     if (refreshError && articles.length === 0) throw refreshError;
 
@@ -65,6 +79,37 @@ app.get("/api/news", async (request, response, next) => {
         stale: Boolean(refreshError),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/cron/ingest", async (request, response, next) => {
+  if (!process.env.CRON_SECRET) {
+    return response.status(503).json({ error: "Cron secret is not configured" });
+  }
+
+  if (request.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+    return response.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!isDatabaseConfigured || !process.env.NEWS_API_KEY) {
+    return response.status(503).json({ error: "News ingestion is not configured" });
+  }
+
+  if (isNewsIngestionRunning()) {
+    return response.status(409).json({ error: "News ingestion is already running" });
+  }
+
+  try {
+    const result = await withTimeout(refreshNews({ force: true }), 45_000);
+
+    console.info("POLISCOPE scheduled ingestion completed", {
+      articleCount: result.articleCount || 0,
+      savedCount: result.savedCount || 0,
+      pagesFetched: result.pagesFetched || 0,
+    });
+    response.json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }
